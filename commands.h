@@ -35,5 +35,9 @@ enum ParsingError
 * global functions
 =============================================================================*/
 int parseCommandExample(char* line);
+class command {
+	order or;
+	vector<string> args;
+}
 
 #endif //__COMMANDS_H__

@@ -28,16 +28,15 @@ class process {
 	int pid;
 	process_state state;
 	int init_time;
-	order my_order;
 	process* next_process;
-	vector<string> args;
+	command cmd;
 }
 
 class os {
 	process* fg_process;
 	std::vector<process> process_list;
 	string last_wd;
-
+	int next_pid;
 }
 
 os my_os;

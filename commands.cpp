@@ -1,10 +1,11 @@
-//commands.c
+//commands.cpp
 #include "commands.h"
+#include <string>
 
 //example function for parsing commands
-int parseCmdExample(char* line)
+command parseCmdExample(char* line)
 {
-	char* delimiters = " \t\n"; //parsing should be done by spaces, tabs or newlines
+	string delimiters = " \t\n"; //parsing should be done by spaces, tabs or newlines
 	char* cmd = strtok(line, delimiters); //read strtok documentation - parses string by delimiters
 	if(!cmd)
 		return INVALID_COMMAND; //this means no tokens were found, most like since command is invalid
@@ -45,8 +46,8 @@ int processReturnValueExample()
 	else if(pid == 0) //child code
 	{
 		//do some work here - for example, execute an external command
-		char* cmd = "/bin/ls";
-		char* args[] = {"ls", "-l", NULL};
+		string cmd = "/bin/ls";
+		string args[] = {"ls", "-l", NULL};
 		execvp(cmd, args);
 		//execvp never returns unless upon error
 		perror("execvp fail");
