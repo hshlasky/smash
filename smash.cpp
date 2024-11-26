@@ -3,20 +3,24 @@
 /*=============================================================================
 * includes, defines, usings
 =============================================================================*/
-#include <stdlib.h>
+#include <cassert>
+#include <cstdlib>
 #include "commands.h"
 #include "signals.h"
+#include <utility>
 #include <vector>
 #include <string>
 #include <iostream>
+#include <cstring>
 
+#define MAX_JOBS 100
 enum process_state
 {
 FORGROUND,
 BACKGROUND,
 STOPPED,
 WAITING
-}
+};
 
 
 
@@ -24,45 +28,126 @@ using namespace std;
 /*=============================================================================
 * classes/structs declarations
 =============================================================================*/
-class process {
+class Process {
 	int pid;
-	process_state state;
-	int init_time;
-	process* next_process;
-	command cmd;
-}
+	bool stopped;
+	time_t init_time;
+	Command command;
+
+public:
+	Process(const int _pid, bool _stopped, Command _command)
+		: pid(_pid), stopped(_stopped), command(std::move(_command)) {
+		init_time = time(nullptr);
+	}
+
+	void print_job() const {
+		cout << command.to_string() << ": " << pid << " " << init_time << " " << (stopped) ? "(stopped)" : "" << endl;
+	}
+};
 
 class os {
-	process* fg_process;
-	std::vector<process> process_list;
+	//Process fg_process;
+	std::vector<Process> jobs_list;
 	string last_wd;
-	int next_pid;
-}
+	bool job_ids[MAX_JOBS] {true}; // An array of bools that represents the available pids.
+
+public:
+	os() : /*fg_process(),*/ last_wd(".") {
+		jobs_list.resize(MAX_JOBS);
+	}
+
+	int find_lowest_available_job_id() {
+		for (int i = 0 ; i < MAX_JOBS ; i++) {
+			if (job_ids[i]) {
+				job_ids[i] = false;
+				return i + 1; // pid is between 1 and MAX_JOBS.
+			}
+		}
+		printf("Smash is full");
+		exit(1);
+	}
+	void new_job(int pid, bool stopped, const Command& cmd) {
+		int job_id = find_lowest_available_job_id();
+		jobs_list[job_id] = Process(pid, stopped, cmd);
+	}
+
+};
 
 os my_os;
+
+
+// Splits a command line string into separate commands based on the delimiters "&&" and ";".
+// Each command is stored as a pair in a vector. The first element of the pair is the command string,
+// and the second element is a boolean indicating whether the delimiter was "&&" (true) or ";" (false).
+//
+// If the delimiter is "&&", it means subsequent commands should not execute if this command fails.
+// If the delimiter is ";", it allows execution of the next command regardless of the result.
+vector<Command> get_commands(const string& command_line) {
+	vector<Command> commands;
+	size_t start = 0;
+	bool reached_end = false;
+	while (!reached_end) {
+		Command cmd;
+		size_t pos_and = command_line.find("&&", start);
+		size_t pos_semicolon = command_line.find(';', start);
+		if (pos_and < pos_semicolon && pos_and != string::npos) { // "&&" was caught
+			strcpy(cmd.text, command_line.substr(start, pos_and - start).c_str());
+			cmd.is_and = true;
+			start = pos_and + 2;
+		}
+		else if(pos_semicolon != string::npos) { // ";" was caught
+			strcpy(cmd.text,command_line.substr(start, pos_semicolon - start).c_str());
+			start = pos_semicolon + 1;
+		}
+		else { // last command
+			strcpy(cmd.text, command_line.substr(start).c_str());
+			reached_end = true;
+		}
+		commands.emplace_back(cmd);
+	}
+	return commands;
+}
 
 /*=============================================================================
 * global variables & data structures
 =============================================================================*/
-char _line[MAX_LINE_SIZE];
+char command_line[MAX_LINE_SIZE];
 
 /*=============================================================================
 * main function
 =============================================================================*/
 int main(int argc, char* argv[])
 {
-	char _cmd[MAX_LINE_SIZE];
-	while(1)
+	//char _cmd[MAX_LINE_SIZE];
+	while(true)
 	{
 		printf("smash > ");
-		fgets(_line, MAX_LINE_SIZE, stdin);
-		strcpy(_cmd, _line);
-		_cmd[strlen(_line) + 1] = '\0';
+		fgets(command_line, MAX_LINE_SIZE, stdin);
+		vector<Command> commands = get_commands(command_line);
+		//strcpy(_cmd, command_line);
+		//_cmd[strlen(command_line) + 1] = '\0';
 		//execute command
+		for (Command command : commands) {
+			if (const ParsingError err = command.parseCommand()) {
+				string error_message = "error: ";
+				if (err == INVALID_COMMAND)
+					error_message = "external: invalid command";
+				else {
+					error_message += command.get_args_error();
+				}
+				if (command.is_and) // The next commands should not execute.
+					break;
+				else
+					continue;
+			}
+			// At this point we have a parsed command with valid arguments.
+
+		}
+
 
 		//initialize buffers for next command
-		_line[0] = '\0';
-		_cmd[0] = '\0';
+		command_line[0] = '\0';
+		//_cmd[0] = '\0';
 	}
 
 	return 0;

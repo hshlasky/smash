@@ -1,35 +1,105 @@
 //commands.cpp
+#include <cstdlib>
 #include "commands.h"
 #include <string>
+#include <cstring>
 
+using namespace std;
 //example function for parsing commands
-command parseCmdExample(char* line)
+bool is_number (char const* num) {
+	return strtol(num, nullptr, 0);
+}
+
+
+
+
+
+ParsingError Command::parseCommand()
 {
-	string delimiters = " \t\n"; //parsing should be done by spaces, tabs or newlines
-	char* cmd = strtok(line, delimiters); //read strtok documentation - parses string by delimiters
-	if(!cmd)
+	const char* delimiters = " \t\n"; //parsing should be done by spaces, tabs or newlines
+	char* command_text = strtok(text, delimiters); //read strtok documentation - parses string by delimiters
+	if(!command_text)
 		return INVALID_COMMAND; //this means no tokens were found, most like since command is invalid
-	
-	char* args[MAX_ARGS];
-	int numArgs = 0;
-	args[0] = cmd; //first token before spaces/tabs/newlines should be command name
+
+	args[0] = command_text; //first token before spaces/tabs/newlines should be command name
 	for(int i = 1; i < MAX_ARGS; i++)
 	{
-		args[i] = strtok(NULL, delimiters); //first arg NULL -> keep tokenizing from previous call
-		if(!args[i])
+		args[i] = strtok(nullptr, delimiters); //first arg NULL -> keep tokenizing from previous call
+		if(!args[i]) {
+			char* last_arg = args[num_args];
+			size_t len = strlen(last_arg);
+
+			if (len > 0 && last_arg[len - 1] == '%') {
+				is_bg = true; // Set background flag
+				last_arg[len - 1] = '\0'; // Remove '%'
+
+				// If the argument is now empty, remove it
+				if (strlen(last_arg) == 0) {
+					args[num_args] = nullptr; // Clear the empty argument
+					num_args--; // Decrement argument count
+				}
+			}
 			break;
-		numArgs++;
+		}
+
+		num_args++;
 	}
-	/*
-	At this point cmd contains the command string and the args array contains
-	the arguments. You can return them via struct/class, for example in C:
-		typedf struct
-		{
-			char* cmd;
-			char* args[MAX_ARGS];
-		} Command;
-	Or continue the execution from here.
-	*/
+
+	bool invalid_args = false;
+	switch (command_text) { // For each command, set the 'order' field and check argiment validity.
+		case "showpid":
+			order = showpid;
+			invalid_args = num_args != 0;
+			break;
+
+		case "pwd":
+			order = pwd;
+			invalid_args = num_args != 0;
+			break;
+
+		case "cd":
+			order = cd;
+			invalid_args = num_args != 1;
+			break;
+
+		case "jobs":
+			order = jobs;
+			invalid_args = num_args != 0;
+			break;
+
+		case "kill":
+			order = kill;
+			// Check if the args are valid, should be: "kill -<signum> <job id>"
+			invalid_args = num_args != 2 || args[1][0] != '-' || !is_number(args[1]) || !is_number(args[2]);
+			break;
+
+		// fg and bg have the same args format, so they are together.
+		case "fg":
+		case "bg":
+			order = (command_text == "fg") ? fg : bg;
+			// Check if the args are valid, should be: "fg/bg <job id>" (job id is optional)
+			invalid_args = num_args > 1 || (num_args == 1 && !is_number(args[1]));
+			break;
+
+		case "quit":
+			order = quit;
+			// Check if the args are valid, should be: "quit [kill]" (kill is optional)
+			invalid_args = num_args > 1 || (num_args == 1 && args[1] != "kill");
+			break;
+
+		case "diff":
+			order = diff;
+			invalid_args = num_args != 2;
+			break;
+
+		default:
+			break;
+	}
+
+	if (invalid_args)
+		return INVALID_ARGS;
+
+	return VALID;
 }
 
 //example function for getting/setting return value of a process.
@@ -46,8 +116,8 @@ int processReturnValueExample()
 	else if(pid == 0) //child code
 	{
 		//do some work here - for example, execute an external command
-		string cmd = "/bin/ls";
-		string args[] = {"ls", "-l", NULL};
+		auto cmd = "/bin/ls";
+		auto args[] = {"ls", "-l", NULL};
 		execvp(cmd, args);
 		//execvp never returns unless upon error
 		perror("execvp fail");
@@ -73,3 +143,4 @@ int processReturnValueExample()
 
 	return 0;
 }
+

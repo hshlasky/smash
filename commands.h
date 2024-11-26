@@ -3,11 +3,16 @@
 /*=============================================================================
 * includes, defines, usings
 =============================================================================*/
-#include <stdlib.h> //for NULL
+#include <cassert>
+#include <cstdlib> //for NULL
+#include <string>
+#include <utility>
+#include <vector>
+#include <map>
 
 #define MAX_LINE_SIZE 80
 #define MAX_ARGS 20
-
+using namespace std;
 enum order
 {
 	showpid,
@@ -19,25 +24,80 @@ enum order
 	bg,
 	quit,
 	diff,
-	outsider
-}
+	unknown
+};
+
 
 /*=============================================================================
 * error definitions
 =============================================================================*/
 enum ParsingError
 {
-	INVALID_COMMAND = 0,
+	VALID,
+	INVALID_COMMAND,
+	INVALID_ARGS,
+
 	//feel free to add more values here
 };
 
 /*=============================================================================
 * global functions
 =============================================================================*/
-int parseCommandExample(char* line);
-class command {
-	order or;
-	vector<string> args;
-}
+
+class Command {
+public:
+	order order;
+	char* args[MAX_ARGS]{};
+	char text[MAX_LINE_SIZE+1]; // char array that holds the whole command (+1 for '\0')
+	int num_args;
+	bool is_and;
+	bool is_bg;
+
+	explicit Command() : order(unknown), num_args(0), is_and(false), is_bg(false) {}
+
+	string to_string() const {
+		string cmd = args[0];
+		for (int i = 1 ; i <= num_args ; i++) {
+			cmd += (" " + static_cast<string>(args[i]));
+		}
+		return cmd;
+	}
+
+	string get_args_error() const {
+		string error_message = static_cast<string>(args[0]) + ": ";
+		switch (order) {
+			case showpid:
+			case pwd:
+			case jobs:
+				error_message += "expected 0 arguments";
+			break;
+
+			case cd:
+				error_message += "expected 1 arguments";
+			break;
+
+			case kill:
+			case fg:
+			case bg:
+				error_message += "invalid arguments";
+			break;
+
+			case quit:
+				error_message += "unexpected arguments";
+			break;
+
+			case diff:
+				error_message += "expected 2 arguments";
+			break;
+
+			default: // should not get here
+				assert(0);
+			break;
+		}
+		return error_message;
+	}
+
+	ParsingError parseCommand();
+};
 
 #endif //__COMMANDS_H__
