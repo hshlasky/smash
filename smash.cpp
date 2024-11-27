@@ -77,8 +77,8 @@ os my_os;
 
 
 // Splits a command line string into separate commands based on the delimiters "&&" and ";".
-// Each command is stored as a pair in a vector. The first element of the pair is the command string,
-// and the second element is a boolean indicating whether the delimiter was "&&" (true) or ";" (false).
+// Each command is stored in a vector.
+// The function updates the feilds "text" with the command text and "is_and" that is true if the delimiter was "&&".
 //
 // If the delimiter is "&&", it means subsequent commands should not execute if this command fails.
 // If the delimiter is ";", it allows execution of the next command regardless of the result.
