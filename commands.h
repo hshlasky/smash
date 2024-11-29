@@ -46,14 +46,14 @@ enum ParsingError
 
 class Command {
 public:
-	order order;
+	order ord;
 	char* args[MAX_ARGS]{};
 	char text[MAX_LINE_SIZE+1]; // char array that holds the whole command (+1 for '\0')
 	int num_args;
 	bool is_and;
 	bool is_bg;
 
-	explicit Command() : order(unknown), num_args(0), is_and(false), is_bg(false) {}
+	explicit Command() : ord(unknown), num_args(0), is_and(false), is_bg(false) {}
 
 	string to_string() const {
 		string cmd = args[0];
@@ -65,7 +65,7 @@ public:
 
 	string get_args_error() const {
 		string error_message = static_cast<string>(args[0]) + ": ";
-		switch (order) {
+		switch (ord) {
 			case showpid:
 			case pwd:
 			case jobs:

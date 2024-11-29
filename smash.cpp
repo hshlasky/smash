@@ -28,7 +28,7 @@ using namespace std;
 /*=============================================================================
 * classes/structs declarations
 =============================================================================*/
-class Process {
+class Process{
 	int pid;
 	bool stopped;
 	time_t init_time;
