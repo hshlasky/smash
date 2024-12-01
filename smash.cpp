@@ -46,7 +46,7 @@ public:
 };
 
 class os {
-	//Process fg_process;	//the process in the foreground
+	Process *fg_process;	//the process in the foreground
 	std::vector<Process> jobs_list;
 	string last_wd;
 	bool job_ids[MAX_JOBS] {true}; // An array of bools that represents the available pids.
