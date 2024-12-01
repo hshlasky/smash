@@ -119,6 +119,10 @@ char command_line[MAX_LINE_SIZE];
 int main(int argc, char* argv[])
 {
 	//char _cmd[MAX_LINE_SIZE];
+
+	//register signals handlers once at the start
+	sig_reg();
+
 	while(true)
 	{
 		printf("smash > ");
