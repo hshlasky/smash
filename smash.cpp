@@ -43,10 +43,14 @@ public:
 	void print_job() const {
 		cout << command.to_string() << ": " << pid << " " << init_time << " " << (stopped) ? "(stopped)" : "" << endl;
 	}
+
+	int get_pid() {
+		return pid;
+	}
 };
 
 class os {
-	Process *fg_process;	//the process in the foreground
+	Process fg_process;	//the process in the foreground
 	std::vector<Process> jobs_list;
 	string last_wd;
 	bool job_ids[MAX_JOBS] {true}; // An array of bools that represents the available pids.
@@ -69,6 +73,10 @@ public:
 	void new_job(int pid, bool stopped, const Command& cmd) {
 		int job_id = find_lowest_available_job_id();
 		jobs_list[job_id] = Process(pid, stopped, cmd);
+	}
+
+	int fg_pid() {		//function to get the foreground pid
+		return fg_process.get_pid();
 	}
 
 };
@@ -112,6 +120,7 @@ vector<Command> get_commands(const string& command_line) {
 * global variables & data structures
 =============================================================================*/
 char command_line[MAX_LINE_SIZE];
+
 
 /*=============================================================================
 * main function

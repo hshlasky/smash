@@ -1,5 +1,5 @@
-#ifndef __SIGNALS_H__
-#define __SIGNALS_H__
+#ifndef SIGNALS_H_
+#define SIGNALS_H_
 
 /*=============================================================================
 * includes, defines, usings
@@ -14,7 +14,7 @@ using namespace std;
 /*=============================================================================
 * global functions
 =============================================================================*/
+//function that register signal handlers
 void sig_reg();
 
-
-#endif //__SIGNALS_H__
+#endif //SIGNALS_H_
