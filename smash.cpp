@@ -40,7 +40,6 @@ public:
 		: pid(_pid), stopped(_stopped), command(std::move(_command)) {
 		init_time = time(nullptr);
 	}
-	Process(){};	//for initializing of os, no fg_process at start
 
 	void print_job() const {
 		cout << command.to_string() << ": " << pid << " " << init_time << " " << (stopped) ? "(stopped)" : "" << endl;
@@ -52,13 +51,13 @@ public:
 };
 
 class os {
-	Process fg_process;	//the process in the foreground
+	int fg_process;	//the place of the process in the foreground
 	std::vector<Process> jobs_list;
 	string last_wd;
 	bool job_ids[MAX_JOBS] {true}; // An array of bools that represents the available pids.
 
 public:
-	os() : fg_process(), last_wd(".") {
+	os() : fg_process(-1), last_wd(".") {
 		jobs_list.resize(MAX_JOBS);
 	}
 
@@ -78,7 +77,7 @@ public:
 	}
 
 	int fg_pid() const {		//function to get the foreground pid
-		return fg_process.get_pid();
+		return jobs_list[fg_process].get_pid();
 	}
 
 };
@@ -125,7 +124,7 @@ vector<Command> get_commands(const string& command_line) {
 char command_line[MAX_LINE_SIZE];
 
 void pwd_func() {
-	cout << getcwd() << endl;
+	cout << getcwd(/*add parameters*/) << endl;
 }
 
 /*=============================================================================
