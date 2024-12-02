@@ -1,5 +1,6 @@
 //smash.cpp
-
+#ifndef SMASH_CPP_
+#define SMASH_CPP_
 /*=============================================================================
 * includes, defines, usings
 =============================================================================*/
@@ -16,7 +17,7 @@
 #define MAX_JOBS 100
 enum process_state
 {
-	FORGROUND,
+	FOREGROUND,
 	BACKGROUND,
 	STOPPED,
 	WAITING
@@ -39,12 +40,13 @@ public:
 		: pid(_pid), stopped(_stopped), command(std::move(_command)) {
 		init_time = time(nullptr);
 	}
+	Process(){};	//for initializing of os, no fg_process at start
 
 	void print_job() const {
 		cout << command.to_string() << ": " << pid << " " << init_time << " " << (stopped) ? "(stopped)" : "" << endl;
 	}
 
-	int get_pid() {
+	int get_pid() const {
 		return pid;
 	}
 };
@@ -56,7 +58,7 @@ class os {
 	bool job_ids[MAX_JOBS] {true}; // An array of bools that represents the available pids.
 
 public:
-	os() : /*fg_process(),*/ last_wd(".") {
+	os() : fg_process(), last_wd(".") {
 		jobs_list.resize(MAX_JOBS);
 	}
 
@@ -165,3 +167,5 @@ int main(int argc, char* argv[])
 
 	return 0;
 }
+
+#endif //SMASH_CPP_
