@@ -3,6 +3,7 @@
 #include "commands.h"
 #include <string>
 #include <cstring>
+#include <iostream>
 
 using namespace std;
 //example function for parsing commands
@@ -10,7 +11,9 @@ bool is_number (char const* num) {
 	return strtol(num, nullptr, 0);
 }
 
-
+void showpid_func() {
+	cout << getpid() << endl;
+}
 
 
 

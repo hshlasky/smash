@@ -100,4 +100,7 @@ public:
 	ParsingError parseCommand();
 };
 
+void showpid_func();
+
+
 #endif //__COMMANDS_H__

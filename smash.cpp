@@ -77,13 +77,14 @@ public:
 		jobs_list[job_id] = Process(pid, stopped, cmd);
 	}
 
-	int fg_pid() {		//function to get the foreground pid
+	int fg_pid() const {		//function to get the foreground pid
 		return fg_process.get_pid();
 	}
 
 };
 
 os my_os;
+
 
 
 // Splits a command line string into separate commands based on the delimiters "&&" and ";".
@@ -123,6 +124,9 @@ vector<Command> get_commands(const string& command_line) {
 =============================================================================*/
 char command_line[MAX_LINE_SIZE];
 
+void pwd_func() {
+	cout << getcwd() << endl;
+}
 
 /*=============================================================================
 * main function
