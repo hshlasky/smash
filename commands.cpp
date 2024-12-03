@@ -4,6 +4,8 @@
 #include <string>
 #include <cstring>
 #include <iostream>
+#include <unistd.h>
+#include <fstream>
 
 using namespace std;
 //example function for parsing commands
@@ -11,12 +13,72 @@ bool is_number (char const* num) {
 	return strtol(num, nullptr, 0);
 }
 
-void showpid_func() {
+
+// * * * orders definitions * * * //
+char last_path[1024];
+
+void showpid_func()
+{
 	cout << getpid() << endl;
 }
 
+void pwd_func()
+{
+	char buffer[1024];
+	cout << getcwd(buffer, sizeof(buffer)) << endl;
+}
+
+void cd_func(const char *path)
+{
+	char temp[1024];
+
+	//change directory to the last path
+	if (strcmp(path, "-") == 0) {
+		getcwd(temp, sizeof(temp));
+		chdir(last_path);				//last_path is a global variable in commands.cpp
+		strcpy(last_path, temp);
+	}
+	//back to the parent directory
+	else if (strcmp(path, "..") == 0){
+		getcwd(last_path, sizeof(last_path));
+
+		int slash_num = 0;
+		int i = 0;
+		while (slash_num < 1 && i < strlen(last_path)) {
+			if (last_path[i] == '/') slash_num++;
+			else if (last_path[i] == ' ') break;
+			i++;
+		}
+		if (slash_num > 1) {
+			memcpy(temp, last_path, i);
+			chdir(temp);
+		}
+	}
+	//change directory to the given path
+	else {
+		getcwd(last_path, sizeof(last_path));
+		chdir(path);
+	}
+}
+
+//assistance function, check if a path exist
+bool pathExists(const string& path)
+{
+	ifstream file(path);  // Try to open the file
+	return file.good();        // Return true if the file is opened successfully
+}
+
+void diff_func(const char *path_1, const char *path_2)
+{
+	if (!pathExists(path_1) || !pathExists(path_2)) {
+		cout << "smash error: diff: expected valid paths for files" << endl;
+	} else {
+
+	}
+}
 
 
+// * * * errors * * * //
 ParsingError Command::parseCommand()
 {
 	const char* delimiters = " \t\n"; //parsing should be done by spaces, tabs or newlines
@@ -51,27 +113,27 @@ ParsingError Command::parseCommand()
 	bool invalid_args = false;
 	switch (command_text) { // For each command, set the 'order' field and check argiment validity.
 		case "showpid":
-			order = showpid;
+			ord = showpid;
 			invalid_args = num_args != 0;
 			break;
 
 		case "pwd":
-			order = pwd;
+			ord = pwd;
 			invalid_args = num_args != 0;
 			break;
 
 		case "cd":
-			order = cd;
+			ord = cd;
 			invalid_args = num_args != 1;
 			break;
 
 		case "jobs":
-			order = jobs;
+			ord = jobs;
 			invalid_args = num_args != 0;
 			break;
 
 		case "kill":
-			order = kill;
+			ord = kill;
 			// Check if the args are valid, should be: "kill -<signum> <job id>"
 			invalid_args = num_args != 2 || args[1][0] != '-' || !is_number(args[1]) || !is_number(args[2]);
 			break;
@@ -79,19 +141,19 @@ ParsingError Command::parseCommand()
 		// fg and bg have the same args format, so they are together.
 		case "fg":
 		case "bg":
-			order = (command_text == "fg") ? fg : bg;
+			ord = (command_text == "fg") ? fg : bg;
 			// Check if the args are valid, should be: "fg/bg <job id>" (job id is optional)
 			invalid_args = num_args > 1 || (num_args == 1 && !is_number(args[1]));
 			break;
 
 		case "quit":
-			order = quit;
+			ord = quit;
 			// Check if the args are valid, should be: "quit [kill]" (kill is optional)
 			invalid_args = num_args > 1 || (num_args == 1 && args[1] != "kill");
 			break;
 
 		case "diff":
-			order = diff;
+			ord = diff;
 			invalid_args = num_args != 2;
 			break;
 

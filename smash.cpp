@@ -15,6 +15,8 @@
 #include <cstring>
 
 #define MAX_JOBS 100
+#define NO_PROCESS -1
+
 enum process_state
 {
 	FOREGROUND,
@@ -51,13 +53,13 @@ public:
 };
 
 class os {
-	int fg_process;	//the place of the process in the foreground
+	int fg_process = NO_PROCESS;	//the place of the process in the foreground
 	std::vector<Process> jobs_list;
 	string last_wd;
 	bool job_ids[MAX_JOBS] {true}; // An array of bools that represents the available pids.
 
 public:
-	os() : fg_process(-1), last_wd(".") {
+	os() : last_wd(".") {
 		jobs_list.resize(MAX_JOBS);
 	}
 
@@ -80,6 +82,16 @@ public:
 		return jobs_list[fg_process].get_pid();
 	}
 
+	void jobs_func() {		//prints all the jobs
+		for (Process job : jobs_list) {
+			job.print_job();
+		}
+	}
+
+	void kill_func(int signum, int job_id) {	//not completed
+		//(signum, jobs_list[job_id]);
+		cout << "signal number " << signum  << " was sent to pid " << job_id << endl;
+	}
 };
 
 os my_os;
@@ -123,9 +135,6 @@ vector<Command> get_commands(const string& command_line) {
 =============================================================================*/
 char command_line[MAX_LINE_SIZE];
 
-void pwd_func() {
-	cout << getcwd(/*add parameters*/) << endl;
-}
 
 /*=============================================================================
 * main function

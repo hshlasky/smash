@@ -11,7 +11,7 @@ using namespace std;
 // Signal handler function for Ctrl+Z
 void sigtstpHandler(int sig) {
     cout << "smash: caught CTRL+Z" << endl;
-    if (my_os.fg_pid()) {
+    if (my_os.fg_pid() > NO_PROCESS) {
         kill(my_os.fg_pid() , SIGSTOP);
         cout << "smash: proccess " << my_os.fg_pid() << " was stopped" << endl;
     }
@@ -20,7 +20,7 @@ void sigtstpHandler(int sig) {
 // Signal handler function for Ctrl+C
 void sigintHandler(int sig) {
     cout << "caught CTRL+C" << endl;
-    if (my_os.fg_pid()) {
+    if (my_os.fg_pid() > NO_PROCESS) {
       kill(my_os.fg_pid() , SIGKILL);
       cout << "smash: proccess " << my_os.fg_pid() << " was killed" << endl;
     }
