@@ -61,19 +61,50 @@ void cd_func(const char *path)
 	}
 }
 
-//assistance function, check if a path exist
+//assistance function for diff, check if the path is accessible (file or directory)
 bool pathExists(const string& path)
+{
+	return access(path.c_str(), F_OK) != -1;
+}
+
+//assistance function for diff, check if the path refers to a file
+bool isFile(const string& path)
 {
 	ifstream file(path);  // Try to open the file
 	return file.good();        // Return true if the file is opened successfully
 }
 
+//assistance function for diff, compare files
+bool fileCompare(const char *path_1, const char *path_2) {
+	ifstream file1(path_1, ios::binary);
+	ifstream file2(path_2, ios::binary);
+
+	//Check if both files opened successfully
+	if (!file1.is_open() || !file2.is_open()) {
+		return false;  // Could not open one or both files
+	}
+
+	// Compare byte by byte
+	return equal(istreambuf_iterator<char>(file1),
+				  istreambuf_iterator<char>(),
+				  istreambuf_iterator<char>(file2));
+}
+
+//comparing between files
 void diff_func(const char *path_1, const char *path_2)
 {
 	if (!pathExists(path_1) || !pathExists(path_2)) {
 		cout << "smash error: diff: expected valid paths for files" << endl;
 	} else {
-
+		if (!isFile(path_1) || !isFile(path_2)) {
+			cout << "smash error: diff paths are not files" << endl;
+		} else {
+			if (fileCompare(path_1, path_2)) {
+				cout << "0" << endl;
+			} else {
+				cout << "1" << endl;
+			}
+		}
 	}
 }
 
