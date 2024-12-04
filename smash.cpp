@@ -56,10 +56,20 @@ public:
 
 	void run_command() {	//for running in foreground
 		switch (command) {
-			case "showpid":
+			case showpid:
 				showpid_func();
 				break;
-			case "pwd":
+			case pwd:
+				pwd_func();
+				break;
+			case cd:
+				cd_func();
+				break;
+			case jobs:
+				my_os->jobs();
+			case diff:
+				diff_func();
+				break;
 		}
 	};
 };
