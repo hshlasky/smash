@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <fstream>
 
-using namespace std;
+
 //example function for parsing commands
 bool is_number (char const* num) {
 	return strtol(num, nullptr, 0);
@@ -15,20 +15,20 @@ bool is_number (char const* num) {
 
 
 // * * * orders definitions * * * //
-char last_path[1024];
+char last_path[1024];		//remembers the last path that smash referred to
 
-void showpid_func()
+void showpid_func()			//prints the pid of the process of smash
 {
 	cout << getpid() << endl;
 }
 
-void pwd_func()
+void pwd_func()				//prints the current directory of smash
 {
 	char buffer[1024];
 	cout << getcwd(buffer, sizeof(buffer)) << endl;
 }
 
-void cd_func(const char *path)
+void cd_func(const char *path)	//changes directory
 {
 	char temp[1024];
 

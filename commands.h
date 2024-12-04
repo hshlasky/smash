@@ -27,6 +27,7 @@ enum order
 	unknown
 };
 
+using namespace std;
 
 /*=============================================================================
 * error definitions

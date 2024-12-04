@@ -13,6 +13,7 @@
 #include <string>
 #include <iostream>
 #include <cstring>
+//#include <algorithm>
 
 #define MAX_JOBS 100
 #define NO_PROCESS -1
@@ -43,6 +44,8 @@ public:
 		init_time = time(nullptr);
 	}
 
+	~Process() = default;
+
 	void print_job() const {
 		cout << command.to_string() << ": " << pid << " " << init_time << " " << (stopped) ? "(stopped)" : "" << endl;
 	}
@@ -50,13 +53,24 @@ public:
 	int get_pid() const {
 		return pid;
 	}
+
+	void run_command() {	//for running in foreground
+		switch (command) {
+			case "showpid":
+				showpid_func();
+				break;
+			case "pwd":
+		}
+	};
 };
 
 class os {
-	int fg_process = NO_PROCESS;	//the place of the process in the foreground
+	Process *fg_process;	//pointer to the process in the foreground
+	bool is_fg = false;		//tells if there is a process which runs foreground
 	std::vector<Process> jobs_list;
 	string last_wd;
 	bool job_ids[MAX_JOBS] {true}; // An array of bools that represents the available pids.
+	int max_job_id = NO_PROCESS;	//holds the highest id with a job occupied
 
 public:
 	os() : last_wd(".") {
@@ -76,10 +90,51 @@ public:
 	void new_job(int pid, bool stopped, const Command& cmd) {
 		int job_id = find_lowest_available_job_id();
 		jobs_list[job_id] = Process(pid, stopped, cmd);
+		if (job_id > max_job_id) {
+			max_job_id = job_id;
+		}
 	}
 
-	int fg_pid() const {		//function to get the foreground pid
-		return jobs_list[fg_process].get_pid();
+	// Function to remove a process from the list
+	void remove_job(int job_id) {
+		jobs_list.erase(jobs_list.begin() + job_id);
+		job_ids[job_id] = false;
+
+		//updating max_job_id
+		if (job_id == max_job_id) {
+			max_job_id = NO_PROCESS;
+			for (int i = job_id ; i > NO_PROCESS ; i--) {
+				if (job_ids[i]) max_job_id = i;
+			}
+		}
+	}
+
+	void fg_func(int job_id) {		//run the job in foreground
+		if (!job_ids[job_id]) {		//checking if exist
+			cout << "smash error: fg: job id " << job_id << " does not exist" << endl;
+		} else {	//run in foreground, remove from the list
+			fg_process = &jobs_list[job_id];
+			remove_job(job_id);
+			is_fg = true;
+			fg_process->run_command();
+			is_fg = false;
+		}
+	}
+
+	void fg_func() {		//run the job with max id in foreground
+		if (max_job_id == NO_PROCESS) {
+			cout << "smash error: fg: jobs list is empty" << endl;
+		} else {
+			fg_func(max_job_id);
+		}
+	}
+
+	int fg_exist() const {		//return if there is a process which runs foreground
+		return is_fg;
+	}
+
+	int fg_pid() const {		//return foreground process pid
+		return fg_process->get_pid();
 	}
 
 	void jobs_func() {		//prints all the jobs
