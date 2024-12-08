@@ -6,6 +6,8 @@
 #include <iostream>
 #include <unistd.h>
 #include <fstream>
+#include <functional>
+#include <unordered_map>
 
 
 //example function for parsing commands
@@ -43,7 +45,7 @@ void cd_func(const char *path)	//changes directory
 		getcwd(last_path, sizeof(last_path));
 
 		int slash_num = 0;
-		int i = 0;
+		size_t i = 0;
 		while (slash_num < 1 && i < strlen(last_path)) {
 			if (last_path[i] == '/') slash_num++;
 			else if (last_path[i] == ' ') break;
@@ -142,55 +144,55 @@ ParsingError Command::parseCommand()
 	}
 
 	bool invalid_args = false;
-	switch (command_text) { // For each command, set the 'order' field and check argiment validity.
-		case "showpid":
+	unordered_map<std::string, function<void()>> commands = {
+		{"showpid", [&]() {
 			ord = showpid;
 			invalid_args = num_args != 0;
-			break;
-
-		case "pwd":
+		}},
+		{"pwd", [&]() {
 			ord = pwd;
 			invalid_args = num_args != 0;
-			break;
-
-		case "cd":
+		}},
+		{"cd", [&]() {
 			ord = cd;
 			invalid_args = num_args != 1;
-			break;
-
-		case "jobs":
+		}},
+		{"jobs", [&]() {
 			ord = jobs;
 			invalid_args = num_args != 0;
-			break;
-
-		case "kill":
-			ord = kill;
-			// Check if the args are valid, should be: "kill -<signum> <job id>"
+		}},
+		{"kill", [&]() {
+			ord = kill_o;
+			// Check if the args are valid, should be: "kill -<signum> <job id>
 			invalid_args = num_args != 2 || args[1][0] != '-' || !is_number(args[1]) || !is_number(args[2]);
-			break;
-
-		// fg and bg have the same args format, so they are together.
-		case "fg":
-		case "bg":
-			ord = (command_text == "fg") ? fg : bg;
-			// Check if the args are valid, should be: "fg/bg <job id>" (job id is optional)
+		}},
+		{"fg", [&]() {
+			ord = fg;
+			// Check if the args are valid, should be: "fg <job id>" (job id is optional)
+			invalid_args = num_args > 1 || (num_args == 1 && !is_number(args[0]));
+		}},
+		{"bg", [&]() {
+			ord = bg;
+			// Check if the args are valid, should be: "bg <job id>" (job id is optional)
 			invalid_args = num_args > 1 || (num_args == 1 && !is_number(args[1]));
-			break;
-
-		case "quit":
+		}},
+		{"quit", [&]() {
 			ord = quit;
 			// Check if the args are valid, should be: "quit [kill]" (kill is optional)
 			invalid_args = num_args > 1 || (num_args == 1 && args[1] != "kill");
-			break;
-
-		case "diff":
+		}},
+		{"diff", [&]() {
 			ord = diff;
 			invalid_args = num_args != 2;
-			break;
+		}}
+	};
 
-		default:
-			break;
-	}
+	// Execute the appropriate command
+	auto it = commands.find(command_text);
+	if (it != commands.end())
+		it->second(); // Call the associated lambda
+	else
+		args[num_args + 1] = NULL;
 
 	if (invalid_args)
 		return INVALID_ARGS;
@@ -200,8 +202,8 @@ ParsingError Command::parseCommand()
 
 //example function for getting/setting return value of a process.
 #include <unistd.h>
-#include <sys/wait.h>
-int processReturnValueExample()
+//#include <sys/wait.h>
+/*int processReturnValueExample()
 {
 	pid_t pid = fork();
 	if(pid < 0)
@@ -236,7 +238,6 @@ int processReturnValueExample()
 			}
 		}
 	}
-
 	return 0;
-}
+}*/
 

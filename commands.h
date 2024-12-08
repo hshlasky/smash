@@ -19,7 +19,7 @@ enum order
 	pwd,
 	cd,
 	jobs,
-	kill,
+	kill_o,
 	fg,
 	bg,
 	quit,
@@ -77,7 +77,7 @@ public:
 				error_message += "expected 1 arguments";
 			break;
 
-			case kill:
+			case kill_o:
 			case fg:
 			case bg:
 				error_message += "invalid arguments";
@@ -113,4 +113,5 @@ void cd_func(const char *path);
 //compare content of folders
 void diff_func(const char *path_1, const char *path_2);
 
+extern void run_command(Command command);
 #endif //__COMMANDS_H__

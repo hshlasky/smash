@@ -13,10 +13,11 @@
 #include <string>
 #include <iostream>
 #include <cstring>
+#include <unistd.h>
 //#include <algorithm>
 
 #define MAX_JOBS 100
-#define NO_PROCESS -1
+#define NO_PROCESS (-1)
 
 enum process_state
 {
@@ -33,12 +34,13 @@ using namespace std;
 * classes/structs declarations
 =============================================================================*/
 class Process{
+public:
 	int pid;
 	bool stopped;
 	time_t init_time;
 	Command command;
 
-public:
+	Process() : pid(0), stopped(true), init_time(0), command(Command()) {}
 	Process(const int _pid, bool _stopped, Command _command)
 		: pid(_pid), stopped(_stopped), command(std::move(_command)) {
 		init_time = time(nullptr);
@@ -47,35 +49,19 @@ public:
 	~Process() = default;
 
 	void print_job() const {
-		cout << command.to_string() << ": " << pid << " " << init_time << " " << (stopped) ? "(stopped)" : "" << endl;
+		string stopped_text = stopped ? " (stopped)" : "";
+		cout << command.to_string() << ": " << pid << " " << init_time << " " << stopped_text << endl;
 	}
 
 	int get_pid() const {
 		return pid;
 	}
 
-	void run_command() {	//for running in foreground
-		switch (command) {
-			case showpid:
-				showpid_func();
-				break;
-			case pwd:
-				pwd_func();
-				break;
-			case cd:
-				cd_func();
-				break;
-			case jobs:
-				my_os->jobs();
-			case diff:
-				diff_func();
-				break;
-		}
-	};
+
 };
 
 class os {
-	Process *fg_process;	//pointer to the process in the foreground
+	Process fg_process;	//pointer to the process in the foreground
 	bool is_fg = false;		//tells if there is a process which runs foreground
 	std::vector<Process> jobs_list;
 	string last_wd;
@@ -83,7 +69,7 @@ class os {
 	int max_job_id = NO_PROCESS;	//holds the highest id with a job occupied
 
 public:
-	os() : last_wd(".") {
+	os() : fg_process(Process()), last_wd(".") {
 		jobs_list.resize(MAX_JOBS);
 	}
 
@@ -119,14 +105,24 @@ public:
 		}
 	}
 
+	void jobs() {
+		for (int i=0 ; i<MAX_JOBS ; i++) {
+			if (!job_ids[i]) {
+				cout << "[" << i << "] ";
+				jobs_list[i].print_job();
+			}
+
+		}
+	}
+
 	void fg_func(int job_id) {		//run the job in foreground
 		if (!job_ids[job_id]) {		//checking if exist
 			cout << "smash error: fg: job id " << job_id << " does not exist" << endl;
 		} else {	//run in foreground, remove from the list
-			fg_process = &jobs_list[job_id];
+			fg_process = jobs_list[job_id];
 			remove_job(job_id);
 			is_fg = true;
-			fg_process->run_command();
+			//run_command(fg_process.command);
 			is_fg = false;
 		}
 	}
@@ -144,7 +140,7 @@ public:
 	}
 
 	int fg_pid() const {		//return foreground process pid
-		return fg_process->get_pid();
+		return is_fg ? fg_process.get_pid() : 0;
 	}
 
 	void jobs_func() {		//prints all the jobs
@@ -161,7 +157,32 @@ public:
 
 os my_os;
 
-
+void run_command(Command command) {	//for running in foreground
+	switch (command.ord) {
+		case showpid:
+			showpid_func();
+		break;
+		case pwd:
+			pwd_func();
+		break;
+		case cd:
+			cd_func(command.args[1]);
+		break;
+		case jobs:
+			my_os.jobs();
+		case diff:
+			diff_func(command.args[1], command.args[2]);
+		break;
+		default:
+			execv(command.args[0], command.args);
+			// If the execv is successful, shouldn't get here.
+			if (errno == ENOENT) // If the path doesn't exist
+				cout << "smash error: external: cannot find program" << endl;
+			else // Any other error.
+				cout << "smash error: external: invalid command" << endl;
+		break;
+	}
+}
 
 // Splits a command line string into separate commands based on the delimiters "&&" and ";".
 // Each command is stored in a vector.
@@ -206,18 +227,18 @@ char command_line[MAX_LINE_SIZE];
 =============================================================================*/
 int main(int argc, char* argv[])
 {
-	//char _cmd[MAX_LINE_SIZE];
+	char _cmd[MAX_LINE_SIZE];
 
 	//register signals handlers once at the start
 	sig_reg();
 
-	while(true)
-	{
+	while(true) {
 		printf("smash > ");
 		fgets(command_line, MAX_LINE_SIZE, stdin);
-		vector<Command> commands = get_commands(command_line);
-		//strcpy(_cmd, command_line);
-		//_cmd[strlen(command_line) + 1] = '\0';
+		strcpy(_cmd, command_line);
+		_cmd[strlen(command_line) + 1] = '\0';
+		vector<Command> commands = get_commands(_cmd);
+
 		//execute command
 		for (Command command : commands) {
 			if (const ParsingError err = command.parseCommand()) {
@@ -234,12 +255,28 @@ int main(int argc, char* argv[])
 			}
 			// At this point we have a parsed command with valid arguments.
 
+			if (command.is_bg) {
+				pid_t pid = fork();
+				if(pid < 0) {
+					perror("fork fail");
+					exit(1);
+				}
+				else if(pid > 0) {//father code
+					my_os.new_job(get_pid(), false, command);
+					continue;
+				}
+				else
+					if (setpgrp() < 0) {
+						perror("setpgrp failed");
+						exit(1);
+					}
+			}
+			//for running in foreground
+			run_command(command);
 		}
-
-
 		//initialize buffers for next command
 		command_line[0] = '\0';
-		//_cmd[0] = '\0';
+		_cmd[0] = '\0';
 	}
 
 	return 0;
