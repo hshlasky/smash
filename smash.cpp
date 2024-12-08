@@ -262,7 +262,7 @@ int main(int argc, char* argv[])
 					exit(1);
 				}
 				else if(pid > 0) {//father code
-					my_os.new_job(get_pid(), false, command);
+					my_os.new_job(getpid(), false, command);
 					continue;
 				}
 				else
