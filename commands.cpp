@@ -110,7 +110,6 @@ void diff_func(const char *path_1, const char *path_2)
 	}
 }
 
-
 // * * * errors * * * //
 ParsingError Command::parseCommand()
 {

@@ -143,15 +143,52 @@ public:
 		return is_fg ? fg_process.get_pid() : 0;
 	}
 
-	void jobs_func() {		//prints all the jobs
-		for (Process job : jobs_list) {
-			job.print_job();
+	void kill_func(int signum, int job_id) {	//send signal number signum to process with job_d
+		if (!job_ids[job_id]) {		//checking if that job exist
+			cout << "job id " << job_id << " does not exist";
+		}
+
+		if (kill(signum, jobs_list[job_id]) == -1) {
+			perror("smash error: kill failed");
+			exit(1);
+		}
+		cout << "signal number " << signum << " was sent to pid " << job_id << endl;
+		remove_job(job_id);
+	}
+
+	void bg_func(int job_id) {		//run in backround
+		if (!job_ids[job_id]) {
+			cout << "job id " << job_id << " does not exist";
+		}
+		if (!jobs_list[job_id].stopped) {
+			cout << "smash error: bg: job id " << job_id << " is already in background";
+		}
+
+		if (kill(SIGCONT, jobs_list[job_id]) == -1) {
+			perror("smash error: kill failed");
+			exit(1);
+		}
+		jobs_list[job_id].stopped = true;
+		jobs_list[job_id].print_job();
+	}
+
+	void bg_func() {		//run the job with max id in backround
+		if (max_job_id == NO_PROCESS) {
+			cout << "smash error: fg: jobs list is empty" << endl;
+		} else {
+			bg_func(max_job_id);
 		}
 	}
 
-	void kill_func(int signum, int job_id) {	//not completed
-		//(signum, jobs_list[job_id]);
-		cout << "signal number " << signum  << " was sent to pid " << job_id << endl;
+	void quit_func(bool got_kill) {		//kill smash, not completed
+		if (got_kill) {
+			for (int i = 0 ; i < MAX_JOBS ; i++) {
+				if (job_ids[i]) {
+					cout << "[" << job_ids[i] << "] ";
+				}
+			}
+		}
+		exit(0);
 	}
 };
 
@@ -172,6 +209,18 @@ void run_command(Command command) {	//for running in foreground
 			my_os.jobs();
 		case diff:
 			diff_func(command.args[1], command.args[2]);
+		break;
+		case kill_o:
+			my_os.kill_func(*command.args[1], *command.args[2]);
+		break;
+		case fg:		//we need to separate fg with arguments and without
+			my_os.fg_func();
+		break;
+		case bg:		//we need to separate bg with arguments and without
+			my_os.bg_func();
+		break;
+		case quit:		//we need to separate quit with kill and without
+			my_os.quit_func(false);
 		break;
 		default:
 			execv(command.args[0], command.args);
