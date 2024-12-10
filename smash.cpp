@@ -303,7 +303,7 @@ bool run_command(const Command& command) {	//for running in foreground
 			successful = diff_func(command.args[1], command.args[2]);
 		break;
 		case kill_o:
-			successful = my_os.kill_func(stoi(command.args[1]), stoi(command.args[2]));
+			successful = my_os.kill_func(-stoi(command.args[1]), stoi(command.args[2]));
 		break;
 		case fg:
 			if (command.num_args == 1)
@@ -406,7 +406,7 @@ void sigtstpHandler(int sig) {
 
 // Signal handler function for Ctrl+C
 void sigintHandler(int sig) {
-	cout << "caught CTRL+C" << endl;
+	cout << "smash: caught CTRL+C" << endl;
 	if (my_os.fg_exist()) {
 		kill(my_os.fg_pid() , SIGKILL);
 		cout << "smash: proccess " << my_os.fg_pid() << " was killed" << endl;
@@ -442,7 +442,9 @@ int main(int argc, char* argv[])
 			if (const ParsingError err = command.parseCommand()) {
 				string error_message = "smash error: ";
 				if (err == INVALID_COMMAND)
-					error_message = "external: invalid command";
+					error_message += "external: invalid command";
+				if (err == BG_FG_ERROR)
+					error_message += "fg: cannot run in background";
 				else {
 					error_message += command.get_args_error();
 				}

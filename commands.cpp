@@ -75,16 +75,7 @@ bool cd_func(const string& path)	//changes directory
 			return true;
 
 		memcpy(temp, cwd, i);
-
-		/*while (slash_num < 1 && i < strlen(last_path)) {
-			if (last_path[i] == '/') slash_num++;
-			else if (last_path[i] == ' ') break;
-			i++;
-		}
-		if (slash_num > 1) {
-			memcpy(temp, last_path, i);
-
-		}*/
+		temp[i] = '\0';
 	}
 	//change directory to the given path
 	else {
@@ -210,7 +201,7 @@ ParsingError Command::parseCommand()
 		{"fg", [&]() {
 			ord = fg;
 			// Check if the args are valid, should be: "fg <job id>" (job id is optional)
-			invalid_args = num_args > 1 || (num_args == 1 && !is_number(args[0]));
+			invalid_args = num_args > 1 || (num_args == 1 && !is_number(args[1]));
 		}},
 		{"bg", [&]() {
 			ord = bg;
@@ -235,7 +226,8 @@ ParsingError Command::parseCommand()
 
 	if (invalid_args)
 		return INVALID_ARGS;
-
+	if (ord == fg && is_bg)
+		return BG_FG_ERROR;
 	return VALID;
 }
 
