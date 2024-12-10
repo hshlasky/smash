@@ -399,7 +399,8 @@ vector<Command> get_commands(const string& command_line) {
 void sigtstpHandler(int sig) {
 	cout << "smash: caught CTRL+Z" << endl;
 	if (my_os.fg_exist()) {
-		kill(my_os.fg_pid() , SIGSTOP);
+		pid_t fg_pid = my_os.fg_pid();
+		kill(fg_pid, SIGSTOP);
 		cout << "smash: proccess " << my_os.fg_pid() << " was stopped" << endl;
 	}
 }
@@ -408,18 +409,36 @@ void sigtstpHandler(int sig) {
 void sigintHandler(int sig) {
 	cout << "smash: caught CTRL+C" << endl;
 	if (my_os.fg_exist()) {
-		kill(my_os.fg_pid() , SIGKILL);
+		pid_t fg_pid = my_os.fg_pid();
+		kill(fg_pid , SIGKILL);
 		cout << "smash: proccess " << my_os.fg_pid() << " was killed" << endl;
 	}
 }
 
+void sig_reg() {
+	struct sigaction sa_tstp, sa_int;
+
+	// Setting up the SIGTSTP (CTRL+Z) handler
+	sa_tstp.sa_handler = sigtstpHandler;
+	sigemptyset(&sa_tstp.sa_mask);
+	sa_tstp.sa_flags = 0;
+	sigaction(SIGTSTP, &sa_tstp, nullptr);
+
+	// Setting up the SIGINT (CTRL+C) handler
+	sa_int.sa_handler = sigintHandler;
+	sigemptyset(&sa_int.sa_mask);
+	sa_int.sa_flags = 0;
+	sigaction(SIGINT, &sa_int, nullptr);
+}
+
+/*
 void sig_reg() {
 	//setting signal handler for CTRL+Z
 	signal(SIGTSTP, sigtstpHandler);
 
 	//setting signal handler for CTRL+C
 	signal(SIGINT, sigintHandler);
-}
+}*/
 
 /*=============================================================================
 * main function
