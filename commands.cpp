@@ -31,43 +31,16 @@ void showpid_func()			//prints the pid of the process of smash
 	cout << getpid() << endl; // getpid() is always successful.
 }
 
-void pwd_func()				//prints the current directory of smash
+bool pwd_func()				//prints the current directory of smash
 {
 	char buffer[1024];
-	cout << getcwd(buffer, sizeof(buffer)) << endl;
-}
-
-void cd_func(const char *path)	//changes directory
-{
-	char temp[1024];
-
-	//change directory to the last path
-	if (strcmp(path, "-") == 0) {
-		getcwd(temp, sizeof(temp));
-		chdir(last_path);				//last_path is a global variable in commands.cpp
-		strcpy(last_path, temp);
+	if (!getcwd(buffer, sizeof(buffer))) {
+		perror("smash error: getcwd failed");
+		return false;
 	}
-	//back to the parent directory
-	else if (strcmp(path, "..") == 0){
-		getcwd(last_path, sizeof(last_path));
 
-		int slash_num = 0;
-		size_t i = 0;
-		while (slash_num < 1 && i < strlen(last_path)) {
-			if (last_path[i] == '/') slash_num++;
-			else if (last_path[i] == ' ') break;
-			i++;
-		}
-		if (slash_num > 1) {
-			memcpy(temp, last_path, i);
-			chdir(temp);
-		}
-	}
-	//change directory to the given path
-	else {
-		getcwd(last_path, sizeof(last_path));
-		chdir(path);
-	}
+	cout << buffer << endl;
+	return true;
 }
 
 //assistance function for diff, check if the path is accessible (file or directory)
@@ -75,6 +48,62 @@ bool pathExists(const string& path)
 {
 	return access(path.c_str(), F_OK) != -1;
 }
+
+bool cd_func(const string& path)	//changes directory
+{
+	char temp[1024]; // Destination directory
+	char cwd[1024];
+	if (!getcwd(cwd, sizeof(cwd))) { // get cwd
+		perror("smash error: getcwd failed");
+		return false;
+	}
+
+	if (path == "-") { //change directory to the last path
+		if (!last_path) {
+			cout << "smash error: cd: old pwd not set" << endl;
+			return false;
+		}
+		strcpy(temp, last_path);
+	}
+	//back to the parent directory
+	else if (path == ".."){
+		size_t i;
+		for (i = strlen(cwd) ; i > 0 ; i--) // find the last '/'
+			if (cwd[i] == '/') break;
+
+		if (i == 0) // No parent directory, do nothing
+			return true;
+
+		memcpy(temp, cwd, i);
+
+		/*while (slash_num < 1 && i < strlen(last_path)) {
+			if (last_path[i] == '/') slash_num++;
+			else if (last_path[i] == ' ') break;
+			i++;
+		}
+		if (slash_num > 1) {
+			memcpy(temp, last_path, i);
+
+		}*/
+	}
+	//change directory to the given path
+	else {
+		if (!pathExists(path)) { // check if the given path exists
+			cout << "smash error: cd: target directory does not exist" << endl;
+			return false;
+		}
+		strcpy(temp, path.c_str());
+	}
+
+	if (chdir(temp) == -1) {
+		perror("smash error: chdir failed");
+		return false;
+	}
+	// Save cwd as last path for next call
+	strcpy(last_path, cwd);
+	return true;
+}
+
 
 //assistance function for diff, check if the path refers to a file
 bool isFile(const string& path)
@@ -84,13 +113,16 @@ bool isFile(const string& path)
 }
 
 //assistance function for diff, compare files
-bool fileCompare(const char *path_1, const char *path_2) {
-	ifstream file1(path_1, ios::binary);
-	ifstream file2(path_2, ios::binary);
+//returns 0 if different and 1 if equal
+//returns -1 on failure
+int fileCompare(const string& path_1, const string& path_2) {
+	ifstream file1(path_1.c_str(), ios::binary);
+	ifstream file2(path_2.c_str(), ios::binary);
 
 	//Check if both files opened successfully
 	if (!file1.is_open() || !file2.is_open()) {
-		return false;  // Could not open one or both files
+		perror("smash error: file open failed");
+		return -1;  // Could not open one or both files
 	}
 
 	// Compare byte by byte
@@ -100,21 +132,24 @@ bool fileCompare(const char *path_1, const char *path_2) {
 }
 
 //comparing between files
-void diff_func(const char *path_1, const char *path_2)
+bool diff_func(const string& path_1, const string& path_2)
 {
 	if (!pathExists(path_1) || !pathExists(path_2)) {
 		cout << "smash error: diff: expected valid paths for files" << endl;
-	} else {
-		if (!isFile(path_1) || !isFile(path_2)) {
-			cout << "smash error: diff paths are not files" << endl;
-		} else {
-			if (fileCompare(path_1, path_2)) {
-				cout << "0" << endl;
-			} else {
-				cout << "1" << endl;
-			}
-		}
+		return false;
 	}
+
+	if (!isFile(path_1) || !isFile(path_2)) {
+		cout << "smash error: diff paths are not files" << endl;
+		return false;
+	}
+
+	if (fileCompare(path_1, path_2)) {
+		cout << "0" << endl;
+	} else {
+		cout << "1" << endl;
+	}
+	return true;
 }
 
 // * * * errors * * * //

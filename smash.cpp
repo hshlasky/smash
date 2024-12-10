@@ -28,8 +28,6 @@ enum process_state
 	WAITING
 };
 
-bool run_command(Command);
-
 using namespace std;
 /*=============================================================================
 * classes/structs declarations
@@ -45,16 +43,27 @@ public:
 	Process(const int _pid, bool _stopped, Command _command)
 		: pid(_pid), stopped(_stopped), command(std::move(_command)) {
 		init_time = time(nullptr);
+		if (init_time == -1) {
+			perror("smash error: time failed");
+			exit(1);
+		}
+
+
 	}
 
 	~Process() = default;
 
 	void print_job() const {
-		string stopped_text = stopped ? " (stopped)" : "";
-		cout << command.to_string() << ": " << pid << " " << init_time << " " << stopped_text << endl;
+		const string stopped_text = stopped ? " (stopped)" : "";
+		const time_t current_time = time(nullptr);
+		if (current_time == -1) {
+			perror("smash error: time failed");
+			exit(1);
+		}
+		cout << command.text << ": " << pid << " " << static_cast<int>(difftime(current_time, init_time)) << " secs" << stopped_text << endl;
 	}
 
-	int get_pid() const {
+	inline int get_pid() const {
 		return pid;
 	}
 
@@ -74,7 +83,8 @@ public:
 		jobs_list.resize(MAX_JOBS+1);
 	}
 
-	int find_lowest_available_job_id() {
+	// Finds the lowest availale job id and mark it unavailable
+	int allocate_job_id() {
 		for (int i = 1 ; i <= MAX_JOBS ; i++) { // pid is between 1 and MAX_JOBS.
 			if (!job_ids[i]) {
 				job_ids[i] = true;
@@ -85,7 +95,7 @@ public:
 		exit(1);
 	}
 	void new_job(int pid, bool stopped, const Command& cmd) {
-		int job_id = find_lowest_available_job_id();
+		int job_id = allocate_job_id();
 		jobs_list[job_id] = Process(pid, stopped, cmd);
 		if (job_id > max_job_id) {
 			max_job_id = job_id;
@@ -94,7 +104,7 @@ public:
 
 	// Function to remove a process from the list
 	void remove_job(int job_id) {
-		jobs_list.erase(jobs_list.begin() + job_id);
+		//jobs_list.erase(jobs_list.begin() + job_id);
 		job_ids[job_id] = false;
 
 		//updating max_job_id
@@ -106,7 +116,7 @@ public:
 		}
 	}
 
-	void jobs() {
+	void jobs() const{
 		for (int i=1 ; i<=MAX_JOBS ; i++) {
 			if (job_ids[i]) {
 				cout << "[" << i << "] ";
@@ -115,79 +125,133 @@ public:
 
 		}
 	}
-
-	void fg_func(int job_id) {		//run the job in foreground
+	int fg_pid() const {		//return foreground process pid
+		return is_fg ? fg_process.get_pid() : 0;
+	}
+	bool fg_func(int job_id) {		//run the job in foreground
 		if (!job_ids[job_id]) {		//checking if exist
 			cout << "smash error: fg: job id " << job_id << " does not exist" << endl;
-		} else {	//run in foreground, remove from the list
-			fg_process = jobs_list[job_id];
-			//remove_job(job_id);
-			job_ids[job_id] = false;
-			is_fg = true;
-			run_command(fg_process.command);
-			is_fg = false;
+			return false;
 		}
+		//run in foreground, remove from the list
+		fg_process = jobs_list[job_id];
+		remove_job(job_id);
+		cout << "[" << job_id << "] " << fg_process.command.text << endl;
+		is_fg = true;
+		if (fg_process.stopped && kill(fg_pid(), SIGCONT) == -1) {
+			perror("smash error: kill failed");
+			return false;
+		}
+		fg_process.stopped = false;
+		if (waitpid(fg_pid(), nullptr, 0) == -1) { // wait for the process to finish as it was in fg.
+			perror("smash error: waitpid failed");
+			return false;
+		}
+		is_fg = false;
+		return true;
 	}
 
-	void fg_func() {		//run the job with max id in foreground
+	bool fg_func() {		//run the job with max id in foreground
 		if (max_job_id == NO_PROCESS) {
 			cout << "smash error: fg: jobs list is empty" << endl;
-		} else {
-			fg_func(max_job_id);
+			return false;
 		}
+		return fg_func(max_job_id);
 	}
 
 	int fg_exist() const {		//return if there is a process which runs foreground
 		return is_fg;
 	}
 
-	int fg_pid() const {		//return foreground process pid
-		return is_fg ? fg_process.get_pid() : 0;
-	}
 
-	void kill_func(int signum, int job_id) {	//send signal number signum to process with job_d
+
+	bool kill_func(int signum, int job_id) {	//send signal number signum to process with job_d
 		if (!job_ids[job_id]) {		//checking if that job exist
 			cout << "job id " << job_id << " does not exist";
+			return false;
 		}
-
-		if (kill(signum, jobs_list[job_id]) == -1) {
+		const pid_t pid = jobs_list[job_id].get_pid();
+		if (kill(pid, signum) == -1) {
 			perror("smash error: kill failed");
-			exit(1);
+			return false;
 		}
-		cout << "signal number " << signum << " was sent to pid " << job_id << endl;
-		remove_job(job_id);
+		cout << "signal " << signum << " was sent to pid " << pid << endl;
+		return true;
 	}
 
-	void bg_func(int job_id) {		//run in backround
+	bool bg_func(int job_id) {		//run in backround
 		if (!job_ids[job_id]) {
-			cout << "job id " << job_id << " does not exist";
+			cout << "smash error: bg: job id " << job_id << " does not exist";
+			return false;
 		}
-		if (!jobs_list[job_id].stopped) {
+		Process job = jobs_list[job_id];
+		if (!job.stopped) {
 			cout << "smash error: bg: job id " << job_id << " is already in background";
+			return false;
 		}
-
-		if (kill(SIGCONT, jobs_list[job_id]) == -1) {
+		pid_t pid = job.get_pid();
+		if (kill(pid ,SIGCONT) == -1) {
 			perror("smash error: kill failed");
-			exit(1);
+			return false;
 		}
-		jobs_list[job_id].stopped = true;
-		jobs_list[job_id].print_job();
+		jobs_list[job_id].stopped = false;
+		cout  << fg_process.command.text << ": " << pid << endl;
+		return true;
 	}
 
-	void bg_func() {		//run the job with max id in backround
+	bool bg_func() {		//run the job with max id in backround
 		if (max_job_id == NO_PROCESS) {
-			cout << "smash error: fg: jobs list is empty" << endl;
-		} else {
-			bg_func(max_job_id);
+			cout << "smash error: bg: there are no stopped jobs to resume" << endl;
+			return false;
 		}
+		return bg_func(max_job_id);
+		/* Not sure if this is the idea, not fully clear in the assignment
+		// Find the stopped proccess with the biggest job id
+		int i;
+		for (i=max_job_id ; i > NO_PROCESS ; i--) {
+			if (jobs_list[i].stopped)
+				break;
+		}
+		if (i == NO_PROCESS) {
+			cout << "smash error: bg: there are no stopped jobs to resume" << endl;
+			return false;
+		}
+		return bg_func(i);
+		*/
+
+
 	}
 
-	void quit_func(bool got_kill) {		//kill smash, not completed
-		if (got_kill) {
-			for (int i = 0 ; i < MAX_JOBS ; i++) {
-				if (job_ids[i]) {
-					cout << "[" << job_ids[i] << "] ";
+	// Quit smash and kill all its proccesses
+	void quit_func() const {
+		for (int i = 1 ; i <= max_job_id ; i++) {
+			if (job_ids[i]) {
+				Process p = jobs_list[i];
+				pid_t pid = p.get_pid();
+				cout << "[" << job_ids[i] << "] " << p.command.text << " - sending SIGTERM... ";
+				if (kill(pid ,SIGTERM) == -1) {
+					perror("smash error: kill failed");
+					return;
 				}
+				int j;
+				for (j=0; j < 5; j++) {
+					sleep(1);
+					pid_t result = waitpid(pid, nullptr, WNOHANG);
+					if (result == pid)
+						break;
+					else if (result == -1) {
+						perror("smash error: waitpid failed");
+						return;
+					}
+				}
+				if (j == 5) {
+					cout << "sending SIGKILL ";
+					if (kill(pid ,SIGKILL) == -1) {
+						perror("smash error: kill failed");
+						return;
+					}
+				}
+				cout << "done" << endl;
 			}
 		}
 		exit(0);
@@ -196,35 +260,44 @@ public:
 
 os my_os;
 
-bool run_command(Command command) {	//for running in foreground
+bool run_command(const Command& command) {	//for running in foreground
 	bool successful = true;
 	switch (command.ord) {
 		case showpid:
 			showpid_func();
 		break;
 		case pwd:
-			pwd_func();
+			successful = pwd_func();
 		break;
 		case cd:
-			cd_func(command.args[1]);
+			successful = cd_func(command.args[1]);
 		break;
 		case jobs:
 			my_os.jobs();
 		break;
 		case diff:
-			diff_func(command.args[1], command.args[2]);
+			successful = diff_func(command.args[1], command.args[2]);
 		break;
 		case kill_o:
-			my_os.kill_func(*command.args[1], *command.args[2]);
+			successful = my_os.kill_func(stoi(command.args[1]), stoi(command.args[2]));
 		break;
-		case fg:		//we need to separate fg with arguments and without
-			my_os.fg_func();
+		case fg:
+			if (command.num_args == 1)
+				successful = my_os.fg_func(stoi(command.args[1]));
+			else
+				successful = my_os.fg_func();
 		break;
-		case bg:		//we need to separate bg with arguments and without
-			my_os.bg_func();
+		case bg:
+			if (command.num_args == 1)
+				successful = my_os.bg_func(stoi(command.args[1]));
+			else
+				successful = my_os.bg_func();
 		break;
-		case quit:		//we need to separate quit with kill and without
-			my_os.quit_func(false);
+		case quit:
+			if (command.num_args == 0)
+				exit(0);
+			my_os.quit_func();
+			return false; // If successful, won't arrive here
 		break;
 		default:
 			pid_t pid = fork();
@@ -233,7 +306,13 @@ bool run_command(Command command) {	//for running in foreground
 				exit(1);
 			}
 			else if(pid > 0) {//father code
-				wait(NULL);
+				int status;
+				if (wait(&status) == -1) { //wait for child to finish and read exit code into status
+					perror("smash error: wait failed");
+					return false;
+				}
+				if(WIFEXITED(status)) //WIFEXITED determines if a child exited with exit()
+					successful = !WEXITSTATUS(status);
 			}
 			else { // child code
 				vector<const char*> args;
@@ -250,6 +329,7 @@ bool run_command(Command command) {	//for running in foreground
 					cout << "smash error: external: cannot find program" << endl;
 				else // Any other error.
 					cout << "smash error: external: invalid command" << endl;
+				exit(1);
 			}
 		break;
 	}
@@ -342,8 +422,8 @@ int main(int argc, char* argv[])
 				}
 				if (command.is_and) // The next commands should not execute.
 					break;
-				else
-					continue;
+
+				continue;
 			}
 			// At this point we have a parsed command with valid arguments.
 
@@ -364,7 +444,9 @@ int main(int argc, char* argv[])
 					}
 			}
 			//for running in foreground
-			run_command(command);
+			if (!run_command(command) && command.is_and)
+				break;
+
 		}
 	}
 

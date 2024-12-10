@@ -105,13 +105,11 @@ public:
 void showpid_func();
 
 //prints the current directory of smash
-void pwd_func();
+bool pwd_func();
 
 //changes directory
-void cd_func(const string& path);
+bool cd_func(const string& path);
 
 //compare content of folders
-void diff_func(const string& path_1, const string& path_2);
-
-extern void run_command(Command command);
+bool diff_func(const string& path_1, const string& path_2);
 #endif //__COMMANDS_H__
