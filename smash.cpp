@@ -149,9 +149,13 @@ public:
 	int fg_pid() const {		//return foreground process pid
 		return is_fg ? fg_process.get_pid() : 0;
 	}
-	bool fg_func(int job_id) {		//run the job in foreground
+	bool fg_func(const int job_id, const bool is_bg) {		//run the job in foreground
 		if (!job_ids[job_id]) {		//checking if exist
 			cout << "smash error: fg: job id " << job_id << " does not exist" << endl;
+			return false;
+		}
+		if (is_bg) {
+			cout << "smash error: fg: cannot run in background" << endl;
 			return false;
 		}
 		//run in foreground, remove from the list
@@ -172,12 +176,12 @@ public:
 		return true;
 	}
 
-	bool fg_func() {		//run the job with max id in foreground
+	bool fg_func(bool is_bg) {		//run the job with max id in foreground
 		if (max_job_id == NO_PROCESS) {
 			cout << "smash error: fg: jobs list is empty" << endl;
 			return false;
 		}
-		return fg_func(max_job_id);
+		return fg_func(max_job_id, is_bg);
 	}
 
 	int fg_exist() const {		//return if there is a process which runs foreground
@@ -307,9 +311,9 @@ bool run_command(const Command& command) {	//for running in foreground
 		break;
 		case fg:
 			if (command.num_args == 1)
-				successful = my_os.fg_func(stoi(command.args[1]));
+				successful = my_os.fg_func(stoi(command.args[1]), command.is_bg);
 			else
-				successful = my_os.fg_func();
+				successful = my_os.fg_func(command.is_bg);
 		break;
 		case bg:
 			if (command.num_args == 1)
@@ -462,8 +466,6 @@ int main(int argc, char* argv[])
 				string error_message = "smash error: ";
 				if (err == INVALID_COMMAND)
 					error_message += "external: invalid command";
-				if (err == BG_FG_ERROR)
-					error_message += "fg: cannot run in background";
 				else {
 					error_message += command.get_args_error();
 				}

@@ -38,7 +38,6 @@ enum ParsingError
 	VALID,
 	INVALID_COMMAND,
 	INVALID_ARGS,
-	BG_FG_ERROR
 	//feel free to add more values here
 };
 

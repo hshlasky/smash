@@ -226,8 +226,6 @@ ParsingError Command::parseCommand()
 
 	if (invalid_args)
 		return INVALID_ARGS;
-	if (ord == fg && is_bg)
-		return BG_FG_ERROR;
 	return VALID;
 }
 
