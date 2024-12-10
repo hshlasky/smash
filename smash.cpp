@@ -14,6 +14,7 @@
 #include <iostream>
 #include <cstring>
 #include <unistd.h>
+#include <sys/wait.h>
 //#include <algorithm>
 
 #define MAX_JOBS 100
@@ -27,7 +28,7 @@ enum process_state
 	WAITING
 };
 
-
+bool run_command(Command);
 
 using namespace std;
 /*=============================================================================
@@ -65,19 +66,19 @@ class os {
 	bool is_fg = false;		//tells if there is a process which runs foreground
 	std::vector<Process> jobs_list;
 	string last_wd;
-	bool job_ids[MAX_JOBS] {true}; // An array of bools that represents the available pids.
+	bool job_ids[MAX_JOBS+1] {false}; // An array of bools that represents the available pids (false = available)
 	int max_job_id = NO_PROCESS;	//holds the highest id with a job occupied
 
 public:
 	os() : fg_process(Process()), last_wd(".") {
-		jobs_list.resize(MAX_JOBS);
+		jobs_list.resize(MAX_JOBS+1);
 	}
 
 	int find_lowest_available_job_id() {
-		for (int i = 0 ; i < MAX_JOBS ; i++) {
-			if (job_ids[i]) {
-				job_ids[i] = false;
-				return i + 1; // pid is between 1 and MAX_JOBS.
+		for (int i = 1 ; i <= MAX_JOBS ; i++) { // pid is between 1 and MAX_JOBS.
+			if (!job_ids[i]) {
+				job_ids[i] = true;
+				return i;
 			}
 		}
 		printf("Smash is full");
@@ -106,8 +107,8 @@ public:
 	}
 
 	void jobs() {
-		for (int i=0 ; i<MAX_JOBS ; i++) {
-			if (!job_ids[i]) {
+		for (int i=1 ; i<=MAX_JOBS ; i++) {
+			if (job_ids[i]) {
 				cout << "[" << i << "] ";
 				jobs_list[i].print_job();
 			}
@@ -120,9 +121,10 @@ public:
 			cout << "smash error: fg: job id " << job_id << " does not exist" << endl;
 		} else {	//run in foreground, remove from the list
 			fg_process = jobs_list[job_id];
-			remove_job(job_id);
+			//remove_job(job_id);
+			job_ids[job_id] = false;
 			is_fg = true;
-			//run_command(fg_process.command);
+			run_command(fg_process.command);
 			is_fg = false;
 		}
 	}
@@ -194,7 +196,8 @@ public:
 
 os my_os;
 
-void run_command(Command command) {	//for running in foreground
+bool run_command(Command command) {	//for running in foreground
+	bool successful = true;
 	switch (command.ord) {
 		case showpid:
 			showpid_func();
@@ -207,6 +210,7 @@ void run_command(Command command) {	//for running in foreground
 		break;
 		case jobs:
 			my_os.jobs();
+		break;
 		case diff:
 			diff_func(command.args[1], command.args[2]);
 		break;
@@ -223,14 +227,33 @@ void run_command(Command command) {	//for running in foreground
 			my_os.quit_func(false);
 		break;
 		default:
-			execv(command.args[0], command.args);
-			// If the execv is successful, shouldn't get here.
-			if (errno == ENOENT) // If the path doesn't exist
-				cout << "smash error: external: cannot find program" << endl;
-			else // Any other error.
-				cout << "smash error: external: invalid command" << endl;
+			pid_t pid = fork();
+			if(pid < 0) {
+				perror("fork fail");
+				exit(1);
+			}
+			else if(pid > 0) {//father code
+				wait(NULL);
+			}
+			else { // child code
+				vector<const char*> args;
+				for (const auto& arg : command.args) {
+					args.push_back(arg.c_str());
+				}
+				args.push_back(nullptr); // Null-terminate the array
+
+				// Use execv to execute the command
+				execv(args[0], const_cast<char**>(args.data()));
+
+				// If the execv is successful, shouldn't get here.
+				if (errno == ENOENT) // If the path doesn't exist
+					cout << "smash error: external: cannot find program" << endl;
+				else // Any other error.
+					cout << "smash error: external: invalid command" << endl;
+			}
 		break;
 	}
+	return successful;
 }
 
 // Splits a command line string into separate commands based on the delimiters "&&" and ";".
@@ -248,16 +271,16 @@ vector<Command> get_commands(const string& command_line) {
 		size_t pos_and = command_line.find("&&", start);
 		size_t pos_semicolon = command_line.find(';', start);
 		if (pos_and < pos_semicolon && pos_and != string::npos) { // "&&" was caught
-			strcpy(cmd.text, command_line.substr(start, pos_and - start).c_str());
+			cmd.text = command_line.substr(start, pos_and - start);
 			cmd.is_and = true;
 			start = pos_and + 2;
 		}
 		else if(pos_semicolon != string::npos) { // ";" was caught
-			strcpy(cmd.text,command_line.substr(start, pos_semicolon - start).c_str());
+			cmd.text = command_line.substr(start, pos_semicolon - start);
 			start = pos_semicolon + 1;
 		}
 		else { // last command
-			strcpy(cmd.text, command_line.substr(start).c_str());
+			cmd.text = command_line.substr(start);
 			reached_end = true;
 		}
 		commands.emplace_back(cmd);
@@ -268,25 +291,45 @@ vector<Command> get_commands(const string& command_line) {
 /*=============================================================================
 * global variables & data structures
 =============================================================================*/
-char command_line[MAX_LINE_SIZE];
+// Signal handler function for Ctrl+Z
+void sigtstpHandler(int sig) {
+	cout << "smash: caught CTRL+Z" << endl;
+	if (my_os.fg_exist()) {
+		kill(my_os.fg_pid() , SIGSTOP);
+		cout << "smash: proccess " << my_os.fg_pid() << " was stopped" << endl;
+	}
+}
 
+// Signal handler function for Ctrl+C
+void sigintHandler(int sig) {
+	cout << "caught CTRL+C" << endl;
+	if (my_os.fg_exist()) {
+		kill(my_os.fg_pid() , SIGKILL);
+		cout << "smash: proccess " << my_os.fg_pid() << " was killed" << endl;
+	}
+}
+
+void sig_reg() {
+	//setting signal handler for CTRL+Z
+	signal(SIGTSTP, sigtstpHandler);
+
+	//setting signal handler for CTRL+C
+	signal(SIGINT, sigintHandler);
+}
 
 /*=============================================================================
 * main function
 =============================================================================*/
 int main(int argc, char* argv[])
 {
-	char _cmd[MAX_LINE_SIZE];
-
+	string command_line;
 	//register signals handlers once at the start
 	sig_reg();
 
 	while(true) {
 		printf("smash > ");
-		fgets(command_line, MAX_LINE_SIZE, stdin);
-		strcpy(_cmd, command_line);
-		_cmd[strlen(command_line) + 1] = '\0';
-		vector<Command> commands = get_commands(_cmd);
+		getline(cin, command_line);
+		vector<Command> commands = get_commands(command_line);
 
 		//execute command
 		for (Command command : commands) {
@@ -323,9 +366,6 @@ int main(int argc, char* argv[])
 			//for running in foreground
 			run_command(command);
 		}
-		//initialize buffers for next command
-		command_line[0] = '\0';
-		_cmd[0] = '\0';
 	}
 
 	return 0;

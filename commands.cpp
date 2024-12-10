@@ -7,21 +7,28 @@
 #include <unistd.h>
 #include <fstream>
 #include <functional>
+#include <sstream>
 #include <unordered_map>
+#include <algorithm>
 
+using namespace std;
 
 //example function for parsing commands
-bool is_number (char const* num) {
-	return strtol(num, nullptr, 0);
+bool is_number(const string& s) {
+	if (s.empty())
+		return false;
+	if (s.size() == 1)
+		return isdigit(s[0]); // Single character must be a digit
+	bool first_char = isdigit(s[0]) || s[0] == '-'; // If the string conteins more than 1 char, first char can be '-'
+	return first_char && all_of(s.begin()+1, s.end(), ::isdigit); // All other chars must be digits
 }
-
 
 // * * * orders definitions * * * //
 char last_path[1024];		//remembers the last path that smash referred to
 
 void showpid_func()			//prints the pid of the process of smash
 {
-	cout << getpid() << endl;
+	cout << getpid() << endl; // getpid() is always successful.
 }
 
 void pwd_func()				//prints the current directory of smash
@@ -113,37 +120,37 @@ void diff_func(const char *path_1, const char *path_2)
 // * * * errors * * * //
 ParsingError Command::parseCommand()
 {
-	const char* delimiters = " \t\n"; //parsing should be done by spaces, tabs or newlines
-	char* command_text = strtok(text, delimiters); //read strtok documentation - parses string by delimiters
-	if(!command_text)
-		return INVALID_COMMAND; //this means no tokens were found, most like since command is invalid
+	istringstream stream(text);
+	string token;
 
-	args[0] = command_text; //first token before spaces/tabs/newlines should be command name
-	for(int i = 1; i < MAX_ARGS; i++)
-	{
-		args[i] = strtok(nullptr, delimiters); //first arg NULL -> keep tokenizing from previous call
-		if(!args[i]) {
-			char* last_arg = args[num_args];
-			size_t len = strlen(last_arg);
-
-			if (len > 0 && last_arg[len - 1] == '%') {
-				is_bg = true; // Set background flag
-				last_arg[len - 1] = '\0'; // Remove '%'
-
-				// If the argument is now empty, remove it
-				if (strlen(last_arg) == 0) {
-					args[num_args] = nullptr; // Clear the empty argument
-					num_args--; // Decrement argument count
-				}
-			}
-			break;
-		}
-
+	// Tokenize the input based on delimiters
+	while (stream >> token) { // tokenize the text of the command by any whitespace (space, tab or newline).
+		args.push_back(token);
 		num_args++;
+		if (num_args >= MAX_ARGS) {
+			break; // Stop if maximum arguments are reached
+		}
+	}
+
+	if (args.empty()) {
+		return INVALID_COMMAND; // No tokens found, invalid command
+	}
+
+	// Check for background process marker '%'
+	string &last_arg = args.back();
+	if (!last_arg.empty() && last_arg.back() == '%') {
+		is_bg = true;
+		last_arg.pop_back(); // Remove '%'
+
+		// Remove the argument if it is now empty
+		if (last_arg.empty()) {
+			args.pop_back();
+			num_args--;
+		}
 	}
 
 	bool invalid_args = false;
-	unordered_map<std::string, function<void()>> commands = {
+	unordered_map<string, function<void()>> commands = {
 		{"showpid", [&]() {
 			ord = showpid;
 			invalid_args = num_args != 0;
@@ -187,11 +194,9 @@ ParsingError Command::parseCommand()
 	};
 
 	// Execute the appropriate command
-	auto it = commands.find(command_text);
+	auto it = commands.find(args[0]);
 	if (it != commands.end())
 		it->second(); // Call the associated lambda
-	else
-		args[num_args + 1] = NULL;
 
 	if (invalid_args)
 		return INVALID_ARGS;

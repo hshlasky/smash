@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 #include <map>
+#include <numeric>
 
 #define MAX_LINE_SIZE 80
 #define MAX_ARGS 20
@@ -48,8 +49,8 @@ enum ParsingError
 class Command {
 public:
 	order ord;
-	char* args[MAX_ARGS]{};
-	char text[MAX_LINE_SIZE+1]; // char array that holds the whole command (+1 for '\0')
+	vector<string> args; // A vector of strings holding the args
+	string text;  // The original text of the command
 	int num_args;
 	bool is_and;
 	bool is_bg;
@@ -57,15 +58,14 @@ public:
 	explicit Command() : ord(unknown), num_args(0), is_and(false), is_bg(false) {}
 
 	string to_string() const {
-		string cmd = args[0];
-		for (int i = 1 ; i <= num_args ; i++) {
-			cmd += (" " + static_cast<string>(args[i]));
-		}
-		return cmd;
+		return accumulate(args.begin() + 1, args.end(), args[0],
+			[](const string& a, const string& b) {
+				return a + " " + b;
+			});
 	}
 
 	string get_args_error() const {
-		string error_message = static_cast<string>(args[0]) + ": ";
+		string error_message = args[0] + ": ";
 		switch (ord) {
 			case showpid:
 			case pwd:
@@ -108,10 +108,10 @@ void showpid_func();
 void pwd_func();
 
 //changes directory
-void cd_func(const char *path);
+void cd_func(const string& path);
 
 //compare content of folders
-void diff_func(const char *path_1, const char *path_2);
+void diff_func(const string& path_1, const string& path_2);
 
 extern void run_command(Command command);
 #endif //__COMMANDS_H__

@@ -8,7 +8,7 @@
 #include <csignal>
 #include <unistd.h>
 #include <sys/types.h>
-#include "smash.cpp"
+//#include "smash.cpp"
 
 using namespace std;
 /*=============================================================================
