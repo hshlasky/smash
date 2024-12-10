@@ -287,7 +287,7 @@ bool run_command(const Command& command) {	//for running in foreground
 	switch (command.ord) {
 		case showpid:
 			pid = command.is_bg ? getppid() : getpid();
-			cout << pid << endl;
+			cout << "smash pid is " << pid << endl;
 			//showpid_func();
 		break;
 		case pwd:
