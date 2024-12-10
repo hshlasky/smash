@@ -55,7 +55,7 @@ public:
 	bool is_and;
 	bool is_bg;
 
-	explicit Command() : ord(unknown), num_args(0), is_and(false), is_bg(false) {}
+	explicit Command() : ord(unknown), num_args(-1), is_and(false), is_bg(false) {}
 
 	string to_string() const {
 		return accumulate(args.begin() + 1, args.end(), args[0],

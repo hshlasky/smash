@@ -59,7 +59,7 @@ bool cd_func(const string& path)	//changes directory
 	}
 
 	if (path == "-") { //change directory to the last path
-		if (!last_path) {
+		if (strlen(last_path) == 0) {
 			cout << "smash error: cd: old pwd not set" << endl;
 			return false;
 		}

@@ -420,6 +420,7 @@ int main(int argc, char* argv[])
 				else {
 					error_message += command.get_args_error();
 				}
+				cout << error_message << endl;
 				if (command.is_and) // The next commands should not execute.
 					break;
 
@@ -435,14 +436,25 @@ int main(int argc, char* argv[])
 				}
 				else if(pid > 0) {//father code
 					my_os.new_job(getpid(), false, command);
+					if (command.is_and) {
+						int status;
+						if (wait(&status) == -1) { // wait for the process to finish as it was in fg.
+							perror("smash error: wait failed");
+							break;
+						}
+						if (status != 0)
+							break;
+					}
 					continue;
 				}
-				else
-					if (setpgrp() < 0) {
-						perror("setpgrp failed");
-						exit(1);
-					}
+
+				if (setpgrp() < 0) {
+					perror("setpgrp failed");
+					exit(1);
+				}
+				exit(run_command(command));
 			}
+
 			//for running in foreground
 			if (!run_command(command) && command.is_and)
 				break;
