@@ -34,13 +34,13 @@ using namespace std;
 =============================================================================*/
 class Process{
 public:
-	int pid;
+	pid_t pid;
 	bool stopped;
 	time_t init_time;
 	Command command;
 
 	Process() : pid(0), stopped(true), init_time(0), command(Command()) {}
-	Process(const int _pid, bool _stopped, Command _command)
+	Process(const pid_t _pid, bool _stopped, Command _command)
 		: pid(_pid), stopped(_stopped), command(std::move(_command)) {
 		init_time = time(nullptr);
 		if (init_time == -1) {
@@ -83,6 +83,10 @@ public:
 		jobs_list.resize(MAX_JOBS+1);
 	}
 
+	void set_fg(const bool fg) {
+		is_fg = fg;
+	}
+
 	// Finds the lowest availale job id and mark it unavailable
 	int allocate_job_id() {
 		for (int i = 1 ; i <= MAX_JOBS ; i++) { // pid is between 1 and MAX_JOBS.
@@ -94,16 +98,17 @@ public:
 		printf("Smash is full");
 		exit(1);
 	}
-	void new_job(int pid, bool stopped, const Command& cmd) {
-		int job_id = allocate_job_id();
+	int new_job(const pid_t pid, const bool stopped, const Command& cmd) {
+		const int job_id = allocate_job_id();
 		jobs_list[job_id] = Process(pid, stopped, cmd);
 		if (job_id > max_job_id) {
 			max_job_id = job_id;
 		}
+		return job_id;
 	}
 
 	// Function to remove a process from the list
-	void remove_job(int job_id) {
+	void remove_job(const int job_id) {
 		//jobs_list.erase(jobs_list.begin() + job_id);
 		job_ids[job_id] = false;
 
@@ -113,6 +118,22 @@ public:
 			for (int i = job_id ; i > NO_PROCESS ; i--) {
 				if (job_ids[i]) max_job_id = i;
 			}
+		}
+	}
+
+	int get_job_id(const pid_t pid) const {
+		for (int i = 1; i <= max_job_id; i++) {
+			if (job_ids[i] && jobs_list[i].get_pid() == pid)
+				return i;
+		}
+		return -1;
+	}
+
+	void update_jobs_list() {
+		pid_t pid;
+		while ((pid = waitpid(-1, nullptr, WNOHANG)) > 0) {
+			int job_id = get_job_id(pid);
+			remove_job(job_id);
 		}
 	}
 
@@ -167,7 +188,7 @@ public:
 
 	bool kill_func(int signum, int job_id) {	//send signal number signum to process with job_d
 		if (!job_ids[job_id]) {		//checking if that job exist
-			cout << "job id " << job_id << " does not exist";
+			cout << "job id " << job_id << " does not exist" << endl;;
 			return false;
 		}
 		const pid_t pid = jobs_list[job_id].get_pid();
@@ -181,12 +202,12 @@ public:
 
 	bool bg_func(int job_id) {		//run in backround
 		if (!job_ids[job_id]) {
-			cout << "smash error: bg: job id " << job_id << " does not exist";
+			cout << "smash error: bg: job id " << job_id << " does not exist" << endl;
 			return false;
 		}
 		Process job = jobs_list[job_id];
 		if (!job.stopped) {
-			cout << "smash error: bg: job id " << job_id << " is already in background";
+			cout << "smash error: bg: job id " << job_id << " is already in background" << endl;
 			return false;
 		}
 		pid_t pid = job.get_pid();
@@ -262,9 +283,12 @@ os my_os;
 
 bool run_command(const Command& command) {	//for running in foreground
 	bool successful = true;
+	pid_t pid;
 	switch (command.ord) {
 		case showpid:
-			showpid_func();
+			pid = command.is_bg ? getppid() : getpid();
+			cout << pid << endl;
+			//showpid_func();
 		break;
 		case pwd:
 			successful = pwd_func();
@@ -300,7 +324,7 @@ bool run_command(const Command& command) {	//for running in foreground
 			return false; // If successful, won't arrive here
 		break;
 		default:
-			pid_t pid = fork();
+			pid = fork();
 			if(pid < 0) {
 				perror("fork fail");
 				exit(1);
@@ -407,14 +431,16 @@ int main(int argc, char* argv[])
 	sig_reg();
 
 	while(true) {
-		printf("smash > ");
+		cout << "smash > ";
 		getline(cin, command_line);
 		vector<Command> commands = get_commands(command_line);
+
+		my_os.update_jobs_list();
 
 		//execute command
 		for (Command command : commands) {
 			if (const ParsingError err = command.parseCommand()) {
-				string error_message = "error: ";
+				string error_message = "smash error: ";
 				if (err == INVALID_COMMAND)
 					error_message = "external: invalid command";
 				else {
@@ -435,13 +461,14 @@ int main(int argc, char* argv[])
 					exit(1);
 				}
 				else if(pid > 0) {//father code
-					my_os.new_job(getpid(), false, command);
+					int job_id = my_os.new_job(pid, false, command);
 					if (command.is_and) {
 						int status;
-						if (wait(&status) == -1) { // wait for the process to finish as it was in fg.
+						if (wait(&status) == -1) { // wait for the child process to finish
 							perror("smash error: wait failed");
 							break;
 						}
+						my_os.remove_job(job_id);
 						if (status != 0)
 							break;
 					}
@@ -456,8 +483,13 @@ int main(int argc, char* argv[])
 			}
 
 			//for running in foreground
-			if (!run_command(command) && command.is_and)
+			my_os.set_fg(true);
+			bool successful = run_command(command);
+			my_os.set_fg(false);
+			if (!successful && command.is_and) {
 				break;
+			}
+
 
 		}
 	}
