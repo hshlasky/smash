@@ -28,7 +28,7 @@ char last_path[1024];		//remembers the last path that smash referred to
 
 void showpid_func()			//prints the pid of the process of smash
 {
-	cout << getpid() << endl; // getpid() is always successful.
+	cout << "smash pid is " << getpid() << endl; // getpid() is always successful.
 }
 
 bool pwd_func()				//prints the current directory of smash
