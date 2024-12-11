@@ -15,7 +15,7 @@
 #include <cstring>
 #include <unistd.h>
 #include <sys/wait.h>
-//#include <algorithm>
+#include <list>
 
 #define MAX_JOBS 100
 #define NO_PROCESS (-1)
@@ -370,28 +370,27 @@ bool run_command(const Command& command) {	//for running in foreground
 //
 // If the delimiter is "&&", it means subsequent commands should not execute if this command fails.
 // If the delimiter is ";", it allows execution of the next command regardless of the result.
-vector<Command> get_commands(const string& command_line) {
-	vector<Command> commands;
-	size_t start = 0;
-	bool reached_end = false;
-	while (!reached_end) {
-		Command cmd;
-		size_t pos_and = command_line.find("&&", start);
-		size_t pos_semicolon = command_line.find(';', start);
-		if (pos_and < pos_semicolon && pos_and != string::npos) { // "&&" was caught
-			cmd.text = command_line.substr(start, pos_and - start);
-			cmd.is_and = true;
-			start = pos_and + 2;
+list<list<Command>> get_commands(const string& command_line) {
+	list<list<Command>> commands;
+	vector<string> cmd_vec = split_string(command_line, ';');
+	for (const string& s : cmd_vec) {
+		list<Command> temp;
+		bool reached_end;
+		size_t start = 0;
+		while (true) {
+			Command cmd;
+			size_t next = s.find("&&", start);
+			reached_end = next == string::npos;
+			if (reached_end) {
+				cmd.text = s.substr(start);
+				temp.push_back(cmd);
+				break;
+			}
+			cmd.text = s.substr(start, next - start);
+			temp.push_back(cmd);
+			start = next+2;
 		}
-		else if(pos_semicolon != string::npos) { // ";" was caught
-			cmd.text = command_line.substr(start, pos_semicolon - start);
-			start = pos_semicolon + 1;
-		}
-		else { // last command
-			cmd.text = command_line.substr(start);
-			reached_end = true;
-		}
-		commands.emplace_back(cmd);
+		commands.push_back(temp);
 	}
 	return commands;
 }
@@ -456,36 +455,37 @@ int main(int argc, char* argv[])
 	while(true) {
 		cout << "smash > ";
 		getline(cin, command_line);
-		vector<Command> commands = get_commands(command_line);
+		list<list<Command>> commands = get_commands(command_line);
 
 		my_os.update_jobs_list();
 
 		//execute command
-		for (Command command : commands) {
-			if (const ParsingError err = command.parseCommand()) {
-				string error_message = "smash error: ";
-				if (err == INVALID_COMMAND)
-					error_message += "external: invalid command";
-				else {
-					error_message += command.get_args_error();
-				}
-				cout << error_message << endl;
-				if (command.is_and) // The next commands should not execute.
+		for (list<Command> command_list : commands) {
+			for (auto it = command_list.begin(); it != command_list.end(); ++it) {
+				Command command = *it;
+				if (const ParsingError err = command.parseCommand()) {
+					string error_message = "smash error: ";
+					if (err == INVALID_COMMAND)
+						error_message += "external: invalid command";
+					else {
+						error_message += command.get_args_error();
+					}
+					cout << error_message << endl;
 					break;
-
-				continue;
-			}
-			// At this point we have a parsed command with valid arguments.
-
-			if (command.is_bg) {
-				pid_t pid = fork();
-				if(pid < 0) {
-					perror("fork fail");
-					exit(1);
 				}
-				else if(pid > 0) {//father code
-					int job_id = my_os.new_job(pid, false, command);
-					if (command.is_and) {
+				// At this point we have a parsed command with valid arguments.
+
+				if (command.is_bg) {
+					pid_t pid = fork();
+					if(pid < 0) {
+						perror("fork fail");
+						exit(1);
+					}
+					else if(pid > 0) {//father code
+						int job_id = my_os.new_job(pid, false, command);
+						if (next(it) == command_list.end())
+							break;
+
 						int status;
 						if (wait(&status) == -1) { // wait for the child process to finish
 							perror("smash error: wait failed");
@@ -494,27 +494,27 @@ int main(int argc, char* argv[])
 						my_os.remove_job(job_id);
 						if (status != 0)
 							break;
+						continue;
 					}
-					continue;
+
+					if (setpgrp() < 0) {
+						perror("setpgrp failed");
+						exit(1);
+					}
+					exit(run_command(command));
 				}
 
-				if (setpgrp() < 0) {
-					perror("setpgrp failed");
-					exit(1);
+				//for running in foreground
+				my_os.set_fg(true);
+				bool successful = run_command(command);
+				my_os.set_fg(false);
+				if (!successful) {
+					break;
 				}
-				exit(run_command(command));
+
 			}
-
-			//for running in foreground
-			my_os.set_fg(true);
-			bool successful = run_command(command);
-			my_os.set_fg(false);
-			if (!successful && command.is_and) {
-				break;
-			}
-
-
 		}
+
 	}
 
 	return 0;

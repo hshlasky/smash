@@ -143,24 +143,32 @@ bool diff_func(const string& path_1, const string& path_2)
 	return true;
 }
 
+vector<string> split_string(const string& text, const char delimiter) {
+	istringstream stream(text);
+	string token;
+	vector<string> result;
+
+	// Tokenize the input based on delimiters
+	if (delimiter == ' ') {
+		while (stream >> token)
+		result.push_back(token);
+	}
+	else {
+		while (getline(stream, token, delimiter))
+			result.push_back(token);
+	}
+	return result;
+}
+
+
 // * * * errors * * * //
 ParsingError Command::parseCommand()
 {
-	istringstream stream(text);
-	string token;
+	args = split_string(text);
+	num_args = static_cast<int>(args.size()) - 1;
 
-	// Tokenize the input based on delimiters
-	while (stream >> token) { // tokenize the text of the command by any whitespace (space, tab or newline).
-		args.push_back(token);
-		num_args++;
-		if (num_args >= MAX_ARGS) {
-			break; // Stop if maximum arguments are reached
-		}
-	}
-
-	if (args.empty()) {
-		return INVALID_COMMAND; // No tokens found, invalid command
-	}
+	if (num_args >= MAX_ARGS || args.empty())
+		return INVALID_COMMAND;
 
 	// Check for background process marker '%'
 	string &last_arg = args.back();

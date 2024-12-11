@@ -51,10 +51,10 @@ public:
 	vector<string> args; // A vector of strings holding the args
 	string text;  // The original text of the command
 	int num_args;
-	bool is_and;
+	//bool is_and;
 	bool is_bg;
 
-	explicit Command() : ord(unknown), num_args(-1), is_and(false), is_bg(false) {}
+	explicit Command() : ord(unknown), num_args(-1)/*, is_and(false)*/, is_bg(false) {}
 
 	string to_string() const {
 		return accumulate(args.begin() + 1, args.end(), args[0],
@@ -111,4 +111,6 @@ bool cd_func(const string& path);
 
 //compare content of folders
 bool diff_func(const string& path_1, const string& path_2);
+
+vector<string> split_string(const string& text, char delimiter = ' ');
 #endif //__COMMANDS_H__
