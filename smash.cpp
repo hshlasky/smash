@@ -87,6 +87,11 @@ public:
 		is_fg = fg;
 	}
 
+	/*//start process as fg for run command function
+	void fg_run_command(const pid_t pid, bool stopped, const Command& cmd) {
+		fg_process = Process(pid, stopped, cmd);
+	}*/
+
 	// Finds the lowest availale job id and mark it unavailable
 	int allocate_job_id() {
 		for (int i = 1 ; i <= MAX_JOBS ; i++) { // pid is between 1 and MAX_JOBS.
@@ -182,6 +187,26 @@ public:
 			return false;
 		}
 		return fg_func(max_job_id, is_bg);
+	}
+
+	bool fg_no_prints(const int job_id, const bool is_bg) {		//run the job in foreground
+
+		//run in foreground, remove from the list
+		fg_process = jobs_list[job_id];
+		remove_job(job_id);
+		//cout << "[" << job_id << "] " << fg_process.command.text << endl;
+		is_fg = true;
+		if (fg_process.stopped && kill(fg_pid(), SIGCONT) == -1) {
+			perror("smash error: kill failed");
+			return false;
+		}
+		fg_process.stopped = false;
+		if (waitpid(fg_pid(), nullptr, 0) == -1) { // wait for the process to finish as it was in fg.
+			perror("smash error: waitpid failed");
+			return false;
+		}
+		is_fg = false;
+		return true;
 	}
 
 	int fg_exist() const {		//return if there is a process which runs foreground
@@ -336,13 +361,16 @@ bool run_command(const Command& command) {	//for running in foreground
 				}
 			}
 
-
 			if(pid < 0) {
 				perror("fork fail");
 				exit(1);
 			}
-			else if(pid > 0) {//father code
+			else if(pid > 0) {	//father code
+
 				int job_id = my_os.new_job(pid, false, command);
+				if (!command.is_bg)
+					my_os.fg_no_prints(job_id, command.is_bg);
+
 				int status;
 				if (command.is_and || !command.is_bg) {
 					if (wait(&status) == -1) { // wait for the child process to finish
@@ -551,9 +579,10 @@ int main(int argc, char* argv[])
 
 			//for running in foreground
 			if (!command.is_bg) {
-				my_os.set_fg(true);
+				//my_os.set_fg(true);
+
 				bool successful = run_command(command);
-				my_os.set_fg(false);
+				//my_os.set_fg(false);
 				if (!successful && command.is_and) {
 					break;
 				}
