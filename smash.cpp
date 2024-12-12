@@ -329,16 +329,36 @@ bool run_command(const Command& command) {	//for running in foreground
 		break;
 		default:
 			pid = fork();
+			if (pid == 0) {		//child runs setgrp before other codes
+				if (setpgrp() < 0) {
+					perror("setpgrp failed");
+					exit(1);
+				}
+			}
+
+
 			if(pid < 0) {
 				perror("fork fail");
 				exit(1);
 			}
 			else if(pid > 0) {//father code
+				int job_id = my_os.new_job(pid, false, command);
 				int status;
+				if (command.is_and || !command.is_bg) {
+					if (wait(&status) == -1) { // wait for the child process to finish
+						perror("smash error: wait failed");
+						return false;
+					}
+					my_os.remove_job(job_id);
+					if (status != 0)
+						break;
+				}
+				//continue;
+				/*int status;
 				if (wait(&status) == -1) { //wait for child to finish and read exit code into status
 					perror("smash error: wait failed");
 					return false;
-				}
+				}*/
 				if(WIFEXITED(status)) //WIFEXITED determines if a child exited with exit()
 					successful = !WEXITSTATUS(status);
 			}
@@ -404,18 +424,28 @@ void sigtstpHandler(int sig) {
 	cout << "smash: caught CTRL+Z" << endl;
 	if (my_os.fg_exist()) {
 		pid_t fg_pid = my_os.fg_pid();
-		kill(fg_pid, SIGSTOP);
+		cout << "\nctrl+z entered: " << fg_pid << "\n" << endl;
+		if (kill(fg_pid, SIGSTOP) == -1) {
+			perror("smash error: kill failed");
+		}
 		cout << "smash: proccess " << my_os.fg_pid() << " was stopped" << endl;
+	} else {
+		return;
 	}
 }
 
 // Signal handler function for Ctrl+C
 void sigintHandler(int sig) {
-	cout << "smash: caught CTRL+C" << endl;
+	cout << "smash: caught CTRL+C\n" << endl;
 	if (my_os.fg_exist()) {
 		pid_t fg_pid = my_os.fg_pid();
-		kill(fg_pid , SIGKILL);
+		cout << "\nctrl+c entered: " << fg_pid << "\n" << endl;
+		if (kill(fg_pid , SIGKILL) == -1) {
+			perror("smash error: kill failed");
+		}
 		cout << "smash: proccess " << my_os.fg_pid() << " was killed" << endl;
+	} else {
+		return;
 	}
 }
 
@@ -478,41 +508,56 @@ int main(int argc, char* argv[])
 			// At this point we have a parsed command with valid arguments.
 
 			if (command.is_bg) {
-				pid_t pid = fork();
-				if(pid < 0) {
-					perror("fork fail");
-					exit(1);
-				}
-				else if(pid > 0) {//father code
-					int job_id = my_os.new_job(pid, false, command);
-					if (command.is_and) {
-						int status;
-						if (wait(&status) == -1) { // wait for the child process to finish
-							perror("smash error: wait failed");
-							break;
+					//if it's a built-in command, run a different process
+				if (command.ord == showpid || command.ord == pwd || command.ord == cd
+					|| command.ord == diff || command.ord == kill_o || command.ord == fg
+					|| command.ord == bg || command.ord == quit || command.ord == jobs)
+					{
+					pid_t pid = fork();
+					if (pid == 0) {		//child runs setgrp before other codes
+						if (setpgrp() < 0) {
+							perror("setpgrp failed");
+							exit(1);
 						}
-						my_os.remove_job(job_id);
-						if (status != 0)
-							break;
 					}
-					continue;
-				}
 
-				if (setpgrp() < 0) {
-					perror("setpgrp failed");
-					exit(1);
+					if(pid < 0) {
+						perror("fork fail");
+						exit(1);
+					}
+					else if(pid > 0) {//father code
+						int job_id = my_os.new_job(pid, false, command);
+						if (command.is_and) {
+							int status;
+							if (wait(&status) == -1) { // wait for the child process to finish
+								perror("smash error: wait failed");
+								break;
+							}
+							my_os.remove_job(job_id);
+							if (status != 0)
+								break;
+						}
+						continue;
+					}
+					exit(run_command(command));
+				} else {	//if it's external command, the different process starts in the function
+					//exit(run_command(command));
+					bool successful = run_command(command);
+					if (!successful && command.is_and) {
+						break;
+					}
 				}
-				exit(run_command(command));
 			}
 
 			//for running in foreground
-			my_os.set_fg(true);
-			bool successful = run_command(command);
-			my_os.set_fg(false);
-			if (!successful && command.is_and) {
-				break;
+			if (!command.is_bg) {
+				my_os.set_fg(true);
+				bool successful = run_command(command);
+				my_os.set_fg(false);
+				if (!successful && command.is_and) {
+					break;
+				}
 			}
-
 
 		}
 	}
