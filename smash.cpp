@@ -47,8 +47,6 @@ public:
 			perror("smash error: time failed");
 			exit(1);
 		}
-
-
 	}
 
 	~Process() = default;
@@ -66,8 +64,6 @@ public:
 	inline int get_pid() const {
 		return pid;
 	}
-
-
 };
 
 class os {
@@ -87,11 +83,6 @@ public:
 		is_fg = fg;
 	}
 
-	/*//start process as fg for run command function
-	void fg_run_command(const pid_t pid, bool stopped, const Command& cmd) {
-		fg_process = Process(pid, stopped, cmd);
-	}*/
-
 	// Finds the lowest availale job id and mark it unavailable
 	int allocate_job_id() {
 		for (int i = 1 ; i <= MAX_JOBS ; i++) { // pid is between 1 and MAX_JOBS.
@@ -106,6 +97,16 @@ public:
 	int new_job(const pid_t pid, const bool stopped, const Command& cmd) {
 		const int job_id = allocate_job_id();
 		jobs_list[job_id] = Process(pid, stopped, cmd);
+		if (job_id > max_job_id) {
+			max_job_id = job_id;
+		}
+		return job_id;
+	}
+
+	int new_job(const Process& prcs, const bool stopped) {	//adding to list a fg process that was stoped
+		const int job_id = allocate_job_id();
+		jobs_list[job_id] = prcs;
+		jobs_list[job_id].stopped = stopped;
 		if (job_id > max_job_id) {
 			max_job_id = job_id;
 		}
@@ -213,8 +214,6 @@ public:
 		return is_fg;
 	}
 
-
-
 	bool kill_func(int signum, int job_id) {	//send signal number signum to process with job_d
 		if (!job_ids[job_id]) {		//checking if that job exist
 			cout << "job id " << job_id << " does not exist" << endl;;
@@ -306,6 +305,10 @@ public:
 		}
 		exit(0);
 	}
+
+	Process& get_fg_process() {
+		return fg_process;
+	}
 };
 
 os my_os;
@@ -354,13 +357,6 @@ bool run_command(const Command& command) {	//for running in foreground
 		break;
 		default:
 			pid = fork();
-			if (pid == 0) {		//child runs setgrp before other codes
-				if (setpgrp() < 0) {
-					perror("setpgrp failed");
-					exit(1);
-				}
-			}
-
 			if(pid < 0) {
 				perror("fork fail");
 				exit(1);
@@ -368,7 +364,7 @@ bool run_command(const Command& command) {	//for running in foreground
 			else if(pid > 0) {	//father code
 
 				int job_id = my_os.new_job(pid, false, command);
-				if (!command.is_bg)
+				if (!command.is_bg)		//run as fg
 					my_os.fg_no_prints(job_id, command.is_bg);
 
 				int status;
@@ -381,16 +377,14 @@ bool run_command(const Command& command) {	//for running in foreground
 					if (status != 0)
 						break;
 				}
-				//continue;
-				/*int status;
-				if (wait(&status) == -1) { //wait for child to finish and read exit code into status
-					perror("smash error: wait failed");
-					return false;
-				}*/
 				if(WIFEXITED(status)) //WIFEXITED determines if a child exited with exit()
 					successful = !WEXITSTATUS(status);
 			}
 			else { // child code
+				if (setpgrp() < 0) {	//child runs setgrp before other codes
+					perror("setpgrp failed");
+					exit(1);
+				}
 				vector<const char*> args;
 				for (const auto& arg : command.args) {
 					args.push_back(arg.c_str());
@@ -452,11 +446,12 @@ void sigtstpHandler(int sig) {
 	cout << "smash: caught CTRL+Z" << endl;
 	if (my_os.fg_exist()) {
 		pid_t fg_pid = my_os.fg_pid();
-		cout << "\nctrl+z entered: " << fg_pid << "\n" << endl;
 		if (kill(fg_pid, SIGSTOP) == -1) {
 			perror("smash error: kill failed");
 		}
-		cout << "smash: proccess " << my_os.fg_pid() << " was stopped" << endl;
+		cout << "smash: proccess " << fg_pid << " was stopped" << endl;
+		my_os.new_job(my_os.get_fg_process(), true);
+		my_os.set_fg(false);
 	} else {
 		return;
 	}
@@ -467,11 +462,11 @@ void sigintHandler(int sig) {
 	cout << "smash: caught CTRL+C\n" << endl;
 	if (my_os.fg_exist()) {
 		pid_t fg_pid = my_os.fg_pid();
-		cout << "\nctrl+c entered: " << fg_pid << "\n" << endl;
 		if (kill(fg_pid , SIGKILL) == -1) {
 			perror("smash error: kill failed");
 		}
 		cout << "smash: proccess " << my_os.fg_pid() << " was killed" << endl;
+		my_os.set_fg(false);
 	} else {
 		return;
 	}
@@ -493,14 +488,6 @@ void sig_reg() {
 	sigaction(SIGINT, &sa_int, nullptr);
 }
 
-/*
-void sig_reg() {
-	//setting signal handler for CTRL+Z
-	signal(SIGTSTP, sigtstpHandler);
-
-	//setting signal handler for CTRL+C
-	signal(SIGINT, sigintHandler);
-}*/
 
 /*=============================================================================
 * main function
@@ -542,13 +529,6 @@ int main(int argc, char* argv[])
 					|| command.ord == bg || command.ord == quit || command.ord == jobs)
 					{
 					pid_t pid = fork();
-					if (pid == 0) {		//child runs setgrp before other codes
-						if (setpgrp() < 0) {
-							perror("setpgrp failed");
-							exit(1);
-						}
-					}
-
 					if(pid < 0) {
 						perror("fork fail");
 						exit(1);
@@ -567,9 +547,13 @@ int main(int argc, char* argv[])
 						}
 						continue;
 					}
+					//child runs setgrp before other codes
+					if (setpgrp() < 0) {
+						perror("setpgrp failed");
+						exit(1);
+					}
 					exit(run_command(command));
 				} else {	//if it's external command, the different process starts in the function
-					//exit(run_command(command));
 					bool successful = run_command(command);
 					if (!successful && command.is_and) {
 						break;
@@ -579,10 +563,7 @@ int main(int argc, char* argv[])
 
 			//for running in foreground
 			if (!command.is_bg) {
-				//my_os.set_fg(true);
-
 				bool successful = run_command(command);
-				//my_os.set_fg(false);
 				if (!successful && command.is_and) {
 					break;
 				}
