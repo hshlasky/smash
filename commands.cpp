@@ -11,8 +11,8 @@
 #include <unordered_map>
 #include <algorithm>
 #include <string>
-//#include <sys/types.h>
-//#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 using namespace std;
@@ -102,17 +102,12 @@ bool cd_func(const string& path)	//changes directory
 
 //assistance function for diff, check if the path refers to a file
 bool isFile(const string& path) {
-	ifstream file(path.c_str());
-	return file.good();  // If it can be opened, it's treated as a file
-}
-/* system call?
-bool isFile(const string& path) {
-	struct stat buffer;
+	struct stat buffer{};
 	if (stat(path.c_str(), &buffer) != 0) {
 		return false; // Path does not exist
 	}
 	return S_ISREG(buffer.st_mode); // Check if it's a regular file
-}*/
+}
 
 //assistance function for diff, compare files
 //returns 0 if different and 1 if equal
@@ -142,7 +137,7 @@ bool diff_func(const string& path_1, const string& path_2)
 	}
 
 	if (!isFile(path_1) || !isFile(path_2)) {
-		cout << "smash error: diff paths are not files" << endl;
+		cout << "smash error: diff: paths are not files" << endl;
 		return false;
 	}
 
