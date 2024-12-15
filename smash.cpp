@@ -524,9 +524,7 @@ int main(int argc, char* argv[])
 
 			if (command.is_bg) {
 					//if it's a built-in command, run a different process
-				if (command.ord == showpid || command.ord == pwd || command.ord == cd
-					|| command.ord == diff || command.ord == kill_o || command.ord == fg
-					|| command.ord == bg || command.ord == quit || command.ord == jobs)
+				if (command.ord != unknown)
 					{
 					pid_t pid = fork();
 					if(pid < 0) {
