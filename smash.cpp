@@ -103,7 +103,7 @@ public:
 		return job_id;
 	}
 
-	int new_job(const Process& prcs, const bool stopped) {	//adding to list a fg process that was stoped
+	/*int new_job(const Process& prcs, const bool stopped) {	//adding to list a fg process that was stoped
 		const int job_id = allocate_job_id();
 		jobs_list[job_id] = prcs;
 		jobs_list[job_id].stopped = stopped;
@@ -111,7 +111,7 @@ public:
 			max_job_id = job_id;
 		}
 		return job_id;
-	}
+	}*/
 
 	// Function to remove a process from the list
 	void remove_job(const int job_id) {
@@ -449,23 +449,28 @@ vector<Command> get_commands(const string& command_line) {
 // Signal handler function for Ctrl+Z
 void sigtstpHandler(int sig) {
 	cout << "smash: caught CTRL+Z" << endl;
-	if (!my_os.fg_exist())
+	if (!my_os.fg_exist()) {
+		cin.clear();
 		return;
+	}
 
 	pid_t fg_pid = my_os.fg_pid();
 	if (kill(fg_pid, SIGSTOP) == -1) {
 		perror("smash error: kill failed");
 	}
 	cout << "smash: proccess " << fg_pid << " was stopped" << endl;
-	my_os.new_job(my_os.get_fg_process(), true);
+	my_os.new_job(fg_pid, true, my_os.get_fg_process().command);
 	my_os.set_fg(false);
 }
 
 // Signal handler function for Ctrl+C
 void sigintHandler(int sig) {
 	cout << "smash: caught CTRL+C" << endl;
-	if (!my_os.fg_exist())
+	if (!my_os.fg_exist()) {
+		cin.clear();
 		return;
+	}
+
 
 	pid_t fg_pid = my_os.fg_pid();
 	if (kill(fg_pid , SIGKILL) == -1)
@@ -506,6 +511,10 @@ int main(int argc, char* argv[])
 		my_os.set_fg(false);
 		cout << "smash > ";
 		getline(cin, command_line);
+		if (cin.eof() || cin.fail()) {
+			cin.clear(); // Clear the error state
+			continue;
+		}
 		vector<Command> commands = get_commands(command_line);
 
 		my_os.update_jobs_list();
