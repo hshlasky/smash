@@ -308,6 +308,10 @@ public:
 		exit(0);
 	}
 
+	void set_fg_process(pid_t pid, const Command& command) {
+		fg_process = Process(pid, false, command);
+	}
+
 	Process& get_fg_process() {
 		return fg_process;
 	}
@@ -369,6 +373,8 @@ bool run_command(const Command& command) {	//for running in foreground
 				my_os.set_fg(!command.is_bg);
 				if (command.is_bg)
 					job_id = my_os.new_job(pid, false, command);
+				else
+					my_os.set_fg_process(pid, command);
 
 				if (!command.is_and && command.is_bg) // In case the command is in fg and doesn't end in '&&', continue
 					return true;
