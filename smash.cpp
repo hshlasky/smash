@@ -61,7 +61,7 @@ public:
 		cout << command.text << ": " << pid << " " << static_cast<int>(difftime(current_time, init_time)) << " secs" << stopped_text << endl;
 	}
 
-	inline int get_pid() const {
+	inline pid_t get_pid() const {
 		return pid;
 	}
 };
@@ -152,7 +152,7 @@ public:
 
 		}
 	}
-	int fg_pid() const {		//return foreground process pid
+	pid_t fg_pid() const {		//return foreground process pid
 		return is_fg ? fg_process.get_pid() : 0;
 	}
 	bool fg_func(const int job_id, const bool is_bg) {		//run the job in foreground
@@ -174,12 +174,14 @@ public:
 			return false;
 		}
 		fg_process.stopped = false;
-		if (waitpid(fg_pid(), nullptr, 0) == -1) { // wait for the process to finish as it was in fg.
-			perror("smash error: waitpid failed");
+		int status;
+		if (waitpid(fg_pid(), &status, 0) == -1) { // wait for the process to finish as it was in fg.
+			if (!WIFSIGNALED(status))
+				perror("smash error: waitpid failed");
 			return false;
 		}
-		is_fg = false;
-		return true;
+		//is_fg = false;
+		return status == 0;
 	}
 
 	bool fg_func(bool is_bg) {		//run the job with max id in foreground
@@ -190,7 +192,7 @@ public:
 		return fg_func(max_job_id, is_bg);
 	}
 
-	bool fg_no_prints(const int job_id, const bool is_bg) {		//run the job in foreground
+	/*bool fg_no_prints(const int job_id, const bool is_bg) {		//run the job in foreground
 
 		//run in foreground, remove from the list
 		fg_process = jobs_list[job_id];
@@ -208,7 +210,7 @@ public:
 		}
 		is_fg = false;
 		return true;
-	}
+	}*/
 
 	int fg_exist() const {		//return if there is a process which runs foreground
 		return is_fg;
@@ -362,21 +364,24 @@ bool run_command(const Command& command) {	//for running in foreground
 				exit(1);
 			}
 			else if(pid > 0) {	//father code
-
-				int job_id = my_os.new_job(pid, false, command);
-				if (!command.is_bg)		//run as fg
-					my_os.fg_no_prints(job_id, command.is_bg);
-
+				int job_id;
 				int status;
-				if (command.is_and || !command.is_bg) {
-					if (wait(&status) == -1) { // wait for the child process to finish
+				my_os.set_fg(!command.is_bg);
+				if (command.is_bg)
+					job_id = my_os.new_job(pid, false, command);
+
+				if (!command.is_and && command.is_bg) // In case the command is in fg and doesn't end in '&&', continue
+					return true;
+
+				if (wait(&status) == -1) { // wait for the child process to finish
+					if (!WIFSIGNALED(status))
 						perror("smash error: wait failed");
-						return false;
-					}
-					my_os.remove_job(job_id);
-					if (status != 0)
-						break;
+					return false;
 				}
+				my_os.remove_job(job_id);
+				if (status != 0)
+					return false;
+
 				if(WIFEXITED(status)) //WIFEXITED determines if a child exited with exit()
 					successful = !WEXITSTATUS(status);
 			}
@@ -444,32 +449,30 @@ vector<Command> get_commands(const string& command_line) {
 // Signal handler function for Ctrl+Z
 void sigtstpHandler(int sig) {
 	cout << "smash: caught CTRL+Z" << endl;
-	if (my_os.fg_exist()) {
-		pid_t fg_pid = my_os.fg_pid();
-		if (kill(fg_pid, SIGSTOP) == -1) {
-			perror("smash error: kill failed");
-		}
-		cout << "smash: proccess " << fg_pid << " was stopped" << endl;
-		my_os.new_job(my_os.get_fg_process(), true);
-		my_os.set_fg(false);
-	} else {
+	if (!my_os.fg_exist())
 		return;
+
+	pid_t fg_pid = my_os.fg_pid();
+	if (kill(fg_pid, SIGSTOP) == -1) {
+		perror("smash error: kill failed");
 	}
+	cout << "smash: proccess " << fg_pid << " was stopped" << endl;
+	my_os.new_job(my_os.get_fg_process(), true);
+	my_os.set_fg(false);
 }
 
 // Signal handler function for Ctrl+C
 void sigintHandler(int sig) {
-	cout << "smash: caught CTRL+C\n" << endl;
-	if (my_os.fg_exist()) {
-		pid_t fg_pid = my_os.fg_pid();
-		if (kill(fg_pid , SIGKILL) == -1) {
-			perror("smash error: kill failed");
-		}
-		cout << "smash: proccess " << my_os.fg_pid() << " was killed" << endl;
-		my_os.set_fg(false);
-	} else {
+	cout << "smash: caught CTRL+C" << endl;
+	if (!my_os.fg_exist())
 		return;
-	}
+
+	pid_t fg_pid = my_os.fg_pid();
+	if (kill(fg_pid , SIGKILL) == -1)
+		perror("smash error: kill failed");
+
+	cout << "smash: proccess " << my_os.fg_pid() << " was killed" << endl;
+	my_os.set_fg(false);
 }
 
 void sig_reg() {
@@ -498,7 +501,9 @@ int main(int argc, char* argv[])
 	//register signals handlers once at the start
 	sig_reg();
 
-	while(true) {
+	while(true)
+	{
+		my_os.set_fg(false);
 		cout << "smash > ";
 		getline(cin, command_line);
 		vector<Command> commands = get_commands(command_line);
@@ -506,7 +511,8 @@ int main(int argc, char* argv[])
 		my_os.update_jobs_list();
 
 		//execute command
-		for (Command command : commands) {
+		for (Command command : commands)
+		{
 			if (const ParsingError err = command.parseCommand()) {
 				string error_message = "smash error: ";
 				if (err == INVALID_COMMAND)
@@ -521,55 +527,50 @@ int main(int argc, char* argv[])
 				continue;
 			}
 			// At this point we have a parsed command with valid arguments.
-
-			if (command.is_bg) {
-					//if it's a built-in command, run a different process
-				if (command.ord != unknown)
-					{
-					pid_t pid = fork();
-					if(pid < 0) {
-						perror("fork fail");
-						exit(1);
-					}
-					else if(pid > 0) {//father code
-						int job_id = my_os.new_job(pid, false, command);
-						if (command.is_and) {
-							int status;
-							if (wait(&status) == -1) { // wait for the child process to finish
-								perror("smash error: wait failed");
-								break;
-							}
-							my_os.remove_job(job_id);
-							if (status != 0)
-								break;
-						}
-						continue;
-					}
-					//child runs setgrp before other codes
-					if (setpgrp() < 0) {
-						perror("setpgrp failed");
-						exit(1);
-					}
-					exit(run_command(command));
-				} else {	//if it's external command, the different process starts in the function
-					bool successful = run_command(command);
-					if (!successful && command.is_and) {
-						break;
-					}
-				}
-			}
-
 			//for running in foreground
 			if (!command.is_bg) {
 				bool successful = run_command(command);
-				if (!successful && command.is_and) {
+				if (!successful && command.is_and)
 					break;
-				}
+
+				continue;
 			}
 
+			//for running in background
+			//if it's a built-in command, run a different process
+			if (command.ord != unknown) {
+				pid_t pid = fork();
+				if(pid < 0) {
+					perror("fork fail");
+					exit(1);
+				}
+				if(pid > 0) {//father code
+					int job_id = my_os.new_job(pid, false, command);
+					if (command.is_and) {
+						int status;
+						if (wait(&status) == -1) { // wait for the child process to finish
+							perror("smash error: wait failed");
+							break;
+						}
+						my_os.remove_job(job_id);
+						if (status != 0)
+							break;
+					}
+					continue;
+				}
+				//child runs setgrp before other codes
+				if (setpgrp() < 0) {
+					perror("setpgrp failed");
+					exit(1);
+				}
+				exit(run_command(command));
+			}
+			//if it's external command, the different process starts in the function
+			if (!run_command(command) && command.is_and)
+				break;
 		}
-	}
 
+	}
 	return 0;
 }
 
