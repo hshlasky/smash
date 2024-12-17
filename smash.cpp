@@ -87,7 +87,7 @@ public:
 	void update_jobs_list() {
 		for (const Process& p : jobs_list){
 			pid_t pid = p.get_pid();
-			if (kill(pid, 0) != 0 && errno == ESRCH) // Check if p exists
+			if ((kill(pid, 0) != 0 && errno == ESRCH) || waitpid(pid, nullptr, WNOHANG)) // Check if p exists
 				remove_job(get_job_id(pid));
 		}
 	}
@@ -123,6 +123,7 @@ public:
 	}
 
 	void jobs(){
+		usleep(10000);
 		update_jobs_list();
 		for (int i=1 ; i<=MAX_JOBS ; i++) {
 			if (job_ids[i]) {
