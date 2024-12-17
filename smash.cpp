@@ -85,6 +85,7 @@ public:
 		exit(1);
 	}
 	int new_job(const pid_t pid, const bool stopped, const Command& cmd) {
+		update_jobs_list();
 		const int job_id = allocate_job_id();
 		jobs_list[job_id] = Process(pid, stopped, cmd);
 		if (job_id > max_job_id) {
@@ -122,7 +123,8 @@ public:
 		}
 	}
 
-	void jobs() const{
+	void jobs(){
+		update_jobs_list();
 		for (int i=1 ; i<=MAX_JOBS ; i++) {
 			if (job_ids[i]) {
 				cout << "[" << i << "] ";
@@ -470,11 +472,10 @@ int main(int argc, char* argv[])
 		}
 		vector<Command> commands = get_commands(command_line);
 
-		my_os.update_jobs_list();
-
 		//execute command
 		for (Command command : commands)
 		{
+			my_os.update_jobs_list();
 			if (const ParsingError err = command.parseCommand()) {
 				string error_message = "smash error: ";
 				if (err == INVALID_COMMAND)
@@ -527,7 +528,9 @@ int main(int argc, char* argv[])
 					perror("setpgrp failed");
 					exit(1);
 				}
-				exit(run_command(command));
+				bool successful = run_command(command);
+				int exit_code = successful ? 0 : 1;
+				exit(exit_code);
 			}
 			//if it's external command, the different process starts in the function
 			if (!run_command(command) && command.is_and)
