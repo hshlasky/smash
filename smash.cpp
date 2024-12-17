@@ -7,7 +7,6 @@
 #include <cassert>
 #include <cstdlib>
 #include "commands.h"
-#include "signals.h"
 #include <utility>
 #include <vector>
 #include <string>
@@ -15,18 +14,9 @@
 #include <cstring>
 #include <unistd.h>
 #include <sys/wait.h>
-//#include <algorithm>
 
 #define MAX_JOBS 100
 #define NO_PROCESS (-1)
-
-enum process_state
-{
-	FOREGROUND,
-	BACKGROUND,
-	STOPPED,
-	WAITING
-};
 
 using namespace std;
 /*=============================================================================
@@ -103,19 +93,8 @@ public:
 		return job_id;
 	}
 
-	/*int new_job(const Process& prcs, const bool stopped) {	//adding to list a fg process that was stoped
-		const int job_id = allocate_job_id();
-		jobs_list[job_id] = prcs;
-		jobs_list[job_id].stopped = stopped;
-		if (job_id > max_job_id) {
-			max_job_id = job_id;
-		}
-		return job_id;
-	}*/
-
 	// Function to remove a process from the list
 	void remove_job(const int job_id) {
-		//jobs_list.erase(jobs_list.begin() + job_id);
 		job_ids[job_id] = false;
 
 		//updating max_job_id
@@ -168,7 +147,6 @@ public:
 		fg_process = jobs_list[job_id];
 		remove_job(job_id);
 		cout << "[" << job_id << "] " << fg_process.command.text << endl;
-		is_fg = true;
 		if (fg_process.stopped && kill(fg_pid(), SIGCONT) == -1) {
 			perror("smash error: kill failed");
 			return false;
@@ -180,7 +158,6 @@ public:
 				perror("smash error: waitpid failed");
 			return false;
 		}
-		//is_fg = false;
 		return status == 0;
 	}
 
@@ -191,26 +168,6 @@ public:
 		}
 		return fg_func(max_job_id, is_bg);
 	}
-
-	/*bool fg_no_prints(const int job_id, const bool is_bg) {		//run the job in foreground
-
-		//run in foreground, remove from the list
-		fg_process = jobs_list[job_id];
-		remove_job(job_id);
-		//cout << "[" << job_id << "] " << fg_process.command.text << endl;
-		is_fg = true;
-		if (fg_process.stopped && kill(fg_pid(), SIGCONT) == -1) {
-			perror("smash error: kill failed");
-			return false;
-		}
-		fg_process.stopped = false;
-		if (waitpid(fg_pid(), nullptr, 0) == -1) { // wait for the process to finish as it was in fg.
-			perror("smash error: waitpid failed");
-			return false;
-		}
-		is_fg = false;
-		return true;
-	}*/
 
 	int fg_exist() const {		//return if there is a process which runs foreground
 		return is_fg;
@@ -269,8 +226,6 @@ public:
 		}
 		return bg_func(i);
 		*/
-
-
 	}
 
 	// Quit smash and kill all its proccesses
@@ -367,29 +322,27 @@ bool run_command(const Command& command) {	//for running in foreground
 				perror("fork fail");
 				exit(1);
 			}
-			else if(pid > 0) {	//father code
-				int job_id;
+			if(pid > 0) {	//father code
 				int status;
-				my_os.set_fg(!command.is_bg);
 				if (command.is_bg)
-					job_id = my_os.new_job(pid, false, command);
+					my_os.new_job(pid, false, command);
 				else
 					my_os.set_fg_process(pid, command);
 
-				if (!command.is_and && command.is_bg) // In case the command is in fg and doesn't end in '&&', continue
-					return true;
-
-				if (wait(&status) == -1) { // wait for the child process to finish
+				int opt = !command.is_and && command.is_bg ? WNOHANG : 0;
+				if (waitpid(pid, &status, opt) == -1) { // wait for the child process to finish
 					if (!WIFSIGNALED(status))
 						perror("smash error: wait failed");
 					return false;
 				}
-				my_os.remove_job(job_id);
-				if (status != 0)
-					return false;
-
-				if(WIFEXITED(status)) //WIFEXITED determines if a child exited with exit()
-					successful = !WEXITSTATUS(status);
+				if(WIFEXITED(status)) { //WIFEXITED determines if a child exited with exit()
+					int exit_code = WEXITSTATUS(status);
+					if (exit_code){
+						string err_message = exit_code==127 ? "cannot find program" : "invalid command";
+						cout << "smash error: external: " << err_message << endl;
+						successful = false;
+					}
+				}
 			}
 			else { // child code
 				if (setpgrp() < 0) {	//child runs setgrp before other codes
@@ -406,11 +359,8 @@ bool run_command(const Command& command) {	//for running in foreground
 				execv(args[0], const_cast<char**>(args.data()));
 
 				// If the execv is successful, shouldn't get here.
-				if (errno == ENOENT) // If the path doesn't exist
-					cout << "smash error: external: cannot find program" << endl;
-				else // Any other error.
-					cout << "smash error: external: invalid command" << endl;
-				exit(1);
+				const int exit_code = (errno == ENOENT) ? 127 : 1;
+				exit(exit_code);
 			}
 		break;
 	}
@@ -477,7 +427,6 @@ void sigintHandler(int sig) {
 		return;
 	}
 
-
 	pid_t fg_pid = my_os.fg_pid();
 	if (kill(fg_pid , SIGKILL) == -1)
 		perror("smash error: kill failed");
@@ -514,7 +463,6 @@ int main(int argc, char* argv[])
 
 	while(true)
 	{
-		my_os.set_fg(false);
 		cout << "smash > ";
 		getline(cin, command_line);
 		if (cin.eof() || cin.fail()) {
@@ -544,7 +492,9 @@ int main(int argc, char* argv[])
 			// At this point we have a parsed command with valid arguments.
 			//for running in foreground
 			if (!command.is_bg) {
+				my_os.set_fg(true);
 				bool successful = run_command(command);
+				my_os.set_fg(false);
 				if (!successful && command.is_and)
 					break;
 

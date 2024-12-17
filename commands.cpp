@@ -230,7 +230,5 @@ ParsingError Command::parseCommand()
 	if (it != commands.end())
 		it->second(); // Call the associated lambda
 
-	if (invalid_args)
-		return INVALID_ARGS;
-	return VALID;
+	return invalid_args ? INVALID_ARGS : VALID;
 }
