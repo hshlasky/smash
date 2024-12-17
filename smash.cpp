@@ -280,8 +280,7 @@ bool run_command(const Command& command) {	//for running in foreground
 	switch (command.ord) {
 		case showpid:
 			pid = command.is_bg ? getppid() : getpid();
-			cout << pid << endl;
-			//showpid_func();
+			cout << "smash pid is " << pid << endl; // getpid() is always successful.
 		break;
 		case pwd:
 			successful = pwd_func();
@@ -332,7 +331,7 @@ bool run_command(const Command& command) {	//for running in foreground
 				int opt = !command.is_and && command.is_bg ? WNOHANG : 0;
 				if (waitpid(pid, &status, opt) == -1) { // wait for the child process to finish
 					if (!WIFSIGNALED(status))
-						perror("smash error: wait failed");
+						perror("smash error: waitpid failed");
 					return false;
 				}
 				if(WIFEXITED(status)) { //WIFEXITED determines if a child exited with exit()
