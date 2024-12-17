@@ -84,6 +84,13 @@ public:
 		printf("Smash is full");
 		exit(1);
 	}
+	void update_jobs_list() {
+		for (const Process& p : jobs_list){
+			pid_t pid = p.get_pid();
+			if (kill(pid, 0) != 0 && errno == ESRCH) // Check if p exists
+				remove_job(get_job_id(pid));
+		}
+	}
 	int new_job(const pid_t pid, const bool stopped, const Command& cmd) {
 		update_jobs_list();
 		const int job_id = allocate_job_id();
@@ -113,14 +120,6 @@ public:
 				return i;
 		}
 		return -1;
-	}
-
-	void update_jobs_list() {
-		pid_t pid;
-		while ((pid = waitpid(-1, nullptr, WNOHANG)) > 0) {
-			int job_id = get_job_id(pid);
-			remove_job(job_id);
-		}
 	}
 
 	void jobs(){
@@ -325,10 +324,10 @@ bool run_command(const Command& command) {	//for running in foreground
 			}
 			if(pid > 0) {	//father code
 				int status;
-				if (command.is_bg)
-					my_os.new_job(pid, false, command);
-				else
+				if (!command.is_bg)
 					my_os.set_fg_process(pid, command);
+				else
+					usleep(10000); // Sleep for 10ms to make sure child process managed to start correctly
 
 				int opt = !command.is_and && command.is_bg ? WNOHANG : 0;
 				if (waitpid(pid, &status, opt) == -1) { // wait for the child process to finish
@@ -341,9 +340,11 @@ bool run_command(const Command& command) {	//for running in foreground
 					if (exit_code){
 						string err_message = exit_code==127 ? "cannot find program" : "invalid command";
 						cout << "smash error: external: " << err_message << endl;
-						successful = false;
+						return false;
 					}
 				}
+				if (command.is_bg)
+					my_os.new_job(pid, false, command);
 			}
 			else { // child code
 				if (setpgrp() < 0) {	//child runs setgrp before other codes
@@ -510,17 +511,17 @@ int main(int argc, char* argv[])
 					exit(1);
 				}
 				if(pid > 0) {//father code
-					int job_id = my_os.new_job(pid, false, command);
-					if (command.is_and) {
-						int status;
-						if (wait(&status) == -1) { // wait for the child process to finish
-							perror("smash error: wait failed");
-							break;
-						}
-						my_os.remove_job(job_id);
-						if (status != 0)
-							break;
+					int status;
+					my_os.new_job(pid, false, command);
+					int opt = !command.is_and ? WNOHANG : 0;
+					if (waitpid(pid, &status, opt) == -1) { // wait for the child process to finish
+						if (!WIFSIGNALED(status))
+							perror("smash error: waitpid failed");
+						return false;
 					}
+					if(command.is_and && WIFEXITED(status) && WEXITSTATUS(status) != 0)
+						break;
+					usleep(10000); // sleep for 10ms so child's prints are before next "smash >"
 					continue;
 				}
 				//child runs setgrp before other codes
