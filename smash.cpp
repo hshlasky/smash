@@ -85,8 +85,10 @@ public:
 		exit(1);
 	}
 	void update_jobs_list() {
-		for (const Process& p : jobs_list){
-			pid_t pid = p.get_pid();
+		for (int i = 1 ; i <= max_job_id ; i++){
+			if (!job_ids[i])
+				continue;
+			pid_t pid = jobs_list[i].get_pid();
 			if ((kill(pid, 0) != 0 && errno == ESRCH) || waitpid(pid, nullptr, WNOHANG)) // Check if p exists
 				remove_job(get_job_id(pid));
 		}
@@ -231,38 +233,35 @@ public:
 	}
 
 	// Quit smash and kill all its proccesses
-	void quit_func() const {
+	bool quit_func() const {
 		for (int i = 1 ; i <= max_job_id ; i++) {
 			if (job_ids[i]) {
 				Process p = jobs_list[i];
 				pid_t pid = p.get_pid();
-				cout << "[" << job_ids[i] << "] " << p.command.text << " - sending SIGTERM... ";
+				if (pid == getpid())
+					continue;
+				cout << "[" << i << "] " << p.command.text << " - sending SIGTERM... ";
 				if (kill(pid ,SIGTERM) == -1) {
 					perror("smash error: kill failed");
-					return;
+					return false;;
 				}
 				int j;
 				for (j=0; j < 5; j++) {
 					sleep(1);
-					pid_t result = waitpid(pid, nullptr, WNOHANG);
-					if (result == pid)
+					if (kill(pid, 0) != 0 && errno == ESRCH)
 						break;
-					else if (result == -1) {
-						perror("smash error: waitpid failed");
-						return;
-					}
 				}
 				if (j == 5) {
-					cout << "sending SIGKILL ";
+					cout << "sending SIGKILL... ";
 					if (kill(pid ,SIGKILL) == -1) {
 						perror("smash error: kill failed");
-						return;
+						return false;
 					}
 				}
 				cout << "done" << endl;
 			}
 		}
-		exit(0);
+		return true;
 	}
 
 	void set_fg_process(pid_t pid, const Command& command) {
@@ -312,10 +311,13 @@ bool run_command(const Command& command) {	//for running in foreground
 				successful = my_os.bg_func();
 		break;
 		case quit:
-			if (command.num_args == 0)
-				exit(0);
-			my_os.quit_func();
-			return false; // If successful, won't arrive here
+			if (command.num_args != 0 && !my_os.quit_func())
+				return false;
+
+			if (command.is_bg && kill (getppid(), SIGTERM) == -1)
+				perror("smash error: kill failed");
+
+			exit(0);
 		break;
 		default:
 			pid = fork();
